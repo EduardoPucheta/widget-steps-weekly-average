@@ -1,0 +1,1 @@
+# widget-steps-weekly-average

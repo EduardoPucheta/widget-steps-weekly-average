@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Theme.DeviceDefault.DayNight only exists from API 29, so API 26-28 gets the
+      plain device theme and values-v29 supplies the dark-mode-aware one.
+    -->
+    <style name="Theme.StepsWidget" parent="android:Theme.DeviceDefault" />
+</resources>

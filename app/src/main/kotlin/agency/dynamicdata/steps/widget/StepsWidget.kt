@@ -1,7 +1,7 @@
 package agency.dynamicdata.steps.widget
 
 import agency.dynamicdata.steps.health.HealthConnectStepsRepository
-import agency.dynamicdata.steps.settings.StepGoalStore
+import agency.dynamicdata.steps.settings.SettingsStore
 import agency.dynamicdata.steps.ui.MainActivity
 import android.content.Context
 import androidx.compose.runtime.Composable
@@ -47,7 +47,7 @@ class StepsWidget : GlanceAppWidget() {
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val repository = HealthConnectStepsRepository(context)
         val locale = context.resources.configuration.locales[0] ?: Locale.getDefault()
-        val goal = StepGoalStore(context).current()
+        val goal = SettingsStore(context).currentGoal()
 
         val state = StepsWidgetStateLoader(repository).load(
             today = repository.today(),

@@ -7,6 +7,9 @@
     -->
     <uses-permission android:name="android.permission.health.READ_STEPS" />
 
+    <!-- Required from Android 13 to show the morning reminder at all. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <!--
       Package visibility: without this the SDK status check cannot see whether the
       Health Connect provider is installed on Android 11+ and always reports it missing.
@@ -60,6 +63,17 @@
                 <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
             </intent-filter>
         </activity>
+
+        <receiver
+            android:name=".reminder.ReminderReceiver"
+            android:exported="false">
+            <intent-filter>
+                <!-- Alarms do not survive a reboot, and an app update clears them
+                     too, so both are listened for and the alarm is re-armed. -->
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
         <receiver
             android:name=".widget.StepsWidgetReceiver"

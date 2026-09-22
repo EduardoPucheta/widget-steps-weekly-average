@@ -1,19 +1,19 @@
 package agency.dynamicdata.steps.core
 
 /**
- * How this week's average compares with last week's.
+ * How the current window compares with the one immediately before it.
  *
- * Only meaningful when both weeks are measured the same way, so [of] refuses to
- * compare summaries built on different bases.
+ * Only meaningful when both are measured the same way, so [of] refuses to compare
+ * summaries built on different bases or over different numbers of days.
  */
-data class WeekOverWeekTrend(
+data class StepsTrend(
     val currentAverage: Long,
     val previousAverage: Long,
 ) {
     val deltaSteps: Long get() = currentAverage - previousAverage
 
     /**
-     * Change as a fraction of last week, or null when last week averaged zero —
+     * Change as a fraction of the previous window, or null when that averaged zero —
      * dividing by it would report an infinite improvement over having done nothing.
      */
     val deltaFraction: Double?
@@ -30,15 +30,18 @@ data class WeekOverWeekTrend(
 
     companion object {
         /**
-         * Trend between two summaries, or null when either week has no data at all
-         * — a comparison against a blank week is noise, not a signal.
+         * Trend between two summaries, or null when either has no data at all — a
+         * comparison against a blank window is noise, not a signal.
          */
-        fun of(current: WeeklyStepsSummary, previous: WeeklyStepsSummary): WeekOverWeekTrend? {
+        fun of(current: StepsSummary, previous: StepsSummary): StepsTrend? {
             require(current.basis == previous.basis) {
                 "cannot compare a ${current.basis} average with a ${previous.basis} one"
             }
+            require(current.dayCount == previous.dayCount) {
+                "cannot compare a ${current.dayCount}-day average with a ${previous.dayCount}-day one"
+            }
             if (current.hasNoData || previous.hasNoData) return null
-            return WeekOverWeekTrend(current.averageStepsPerDay, previous.averageStepsPerDay)
+            return StepsTrend(current.averageStepsPerDay, previous.averageStepsPerDay)
         }
     }
 }

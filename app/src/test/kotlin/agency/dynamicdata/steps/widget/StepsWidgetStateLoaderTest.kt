@@ -1,36 +1,36 @@
 package agency.dynamicdata.steps.widget
 
 import agency.dynamicdata.steps.core.DailySteps
-import agency.dynamicdata.steps.core.WeekOverWeekTrend
+import agency.dynamicdata.steps.core.StepGoal
+import agency.dynamicdata.steps.core.StepsTrend
 import agency.dynamicdata.steps.health.HealthConnectAvailability
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.time.DayOfWeek
 import java.time.LocalDate
 
 class StepsWidgetStateLoaderTest {
 
-    // Monday, so the current week is 21–27 Sep and the previous one is 14–20 Sep.
-    private val monday = LocalDate.of(2026, 9, 21)
-    private val wednesday = monday.plusDays(2)
+    // "Today". The window under test is 15–21 Sep; the one before it is 8–14 Sep.
+    private val today = LocalDate.of(2026, 9, 22)
+    private val windowStart = LocalDate.of(2026, 9, 15)
+    private val goal = StepGoal(10_000)
 
-    private fun loader(repository: FakeStepsRepository) =
-        StepsWidgetStateLoader(repository, firstDayOfWeek = DayOfWeek.MONDAY)
+    private fun loader(repository: FakeStepsRepository) = StepsWidgetStateLoader(repository)
 
-    private fun week(start: LocalDate, perDay: Long) =
+    private fun sevenDaysFrom(start: LocalDate, perDay: Long) =
         (0L..6L).map { DailySteps(start.plusDays(it), perDay) }
 
     @Test
     fun `asks for permission before reading anything`() = runTest {
         val repository = FakeStepsRepository(permitted = false)
 
-        val state = loader(repository).load(today = monday)
+        val state = loader(repository).load(today, goal)
 
         assertEquals(StepsWidgetState.PermissionRequired, state)
-        assertEquals(0, repository.readCount)
+        assertTrue(repository.requestedWindows.isEmpty())
     }
 
     @Test
@@ -39,10 +39,10 @@ class StepsWidgetStateLoaderTest {
             availability = HealthConnectAvailability.NOT_SUPPORTED,
         )
 
-        val state = loader(repository).load(today = monday)
+        val state = loader(repository).load(today, goal)
 
         assertEquals(StepsWidgetState.HealthConnectUnavailable(updatable = false), state)
-        assertEquals(0, repository.readCount)
+        assertTrue(repository.requestedWindows.isEmpty())
     }
 
     @Test
@@ -51,30 +51,83 @@ class StepsWidgetStateLoaderTest {
             availability = HealthConnectAvailability.UPDATE_REQUIRED,
         )
 
-        val state = loader(repository).load(today = monday)
+        val state = loader(repository).load(today, goal)
 
         assertEquals(StepsWidgetState.HealthConnectUnavailable(updatable = true), state)
     }
 
     @Test
-    fun `computes this week's average and the trend against last week`() = runTest {
-        val repository = FakeStepsRepository(
-            steps = week(monday.minusWeeks(1), perDay = 6000) +
-                listOf(DailySteps(monday, 9000), DailySteps(monday.plusDays(1), 9000)),
-        )
+    fun `reads the last seven complete days and the seven before them`() = runTest {
+        val repository = FakeStepsRepository()
 
-        val state = loader(repository).load(today = monday.plusDays(1)) as StepsWidgetState.Ready
+        loader(repository).load(today, goal)
 
-        assertEquals(9000L, state.summary.averageStepsPerDay)
-        assertEquals(6000L, state.trend!!.previousAverage)
-        assertEquals(WeekOverWeekTrend.Direction.UP, state.trend!!.direction)
+        assertEquals(2, repository.requestedWindows.size)
+        assertEquals(LocalDate.of(2026, 9, 8), repository.requestedWindows[0].start)
+        assertEquals(LocalDate.of(2026, 9, 14), repository.requestedWindows[0].end)
+        assertEquals(LocalDate.of(2026, 9, 15), repository.requestedWindows[1].start)
+        assertEquals(LocalDate.of(2026, 9, 21), repository.requestedWindows[1].end)
     }
 
     @Test
-    fun `has no trend when last week was never tracked`() = runTest {
-        val repository = FakeStepsRepository(steps = listOf(DailySteps(monday, 5000)))
+    fun `never asks for today's steps`() = runTest {
+        val repository = FakeStepsRepository()
 
-        val state = loader(repository).load(today = monday) as StepsWidgetState.Ready
+        loader(repository).load(today, goal)
+
+        assertTrue(repository.requestedWindows.none { today in it })
+    }
+
+    @Test
+    fun `computes the average and the trend against the previous seven days`() = runTest {
+        val repository = FakeStepsRepository(
+            steps = sevenDaysFrom(windowStart.minusDays(7), perDay = 6000) +
+                sevenDaysFrom(windowStart, perDay = 9000),
+        )
+
+        val state = loader(repository).load(today, goal) as StepsWidgetState.Ready
+
+        assertEquals(9000L, state.summary.averageStepsPerDay)
+        assertEquals(6000L, state.trend!!.previousAverage)
+        assertEquals(StepsTrend.Direction.UP, state.trend!!.direction)
+    }
+
+    @Test
+    fun `measures the average against the goal`() = runTest {
+        val repository = FakeStepsRepository(steps = sevenDaysFrom(windowStart, perDay = 8400))
+
+        val state = loader(repository).load(today, goal) as StepsWidgetState.Ready
+
+        assertEquals(1600L, state.progress.stepsShort)
+        assertEquals(84, state.progress.percentOfGoal)
+        assertEquals(false, state.progress.isMet)
+    }
+
+    @Test
+    fun `reports the goal as met once the average reaches it`() = runTest {
+        val repository = FakeStepsRepository(steps = sevenDaysFrom(windowStart, perDay = 11_200))
+
+        val state = loader(repository).load(today, goal) as StepsWidgetState.Ready
+
+        assertTrue(state.progress.isMet)
+        assertEquals(1200L, state.progress.stepsOver)
+        assertEquals(1.0f, state.progress.barFraction, 1e-6f)
+    }
+
+    @Test
+    fun `uses whichever goal it is handed`() = runTest {
+        val repository = FakeStepsRepository(steps = sevenDaysFrom(windowStart, perDay = 6000))
+
+        val state = loader(repository).load(today, StepGoal(6000)) as StepsWidgetState.Ready
+
+        assertTrue(state.progress.isMet)
+    }
+
+    @Test
+    fun `has no trend when the previous seven days were never tracked`() = runTest {
+        val repository = FakeStepsRepository(steps = sevenDaysFrom(windowStart, perDay = 5000))
+
+        val state = loader(repository).load(today, goal) as StepsWidgetState.Ready
 
         assertEquals(5000L, state.summary.averageStepsPerDay)
         assertNull(state.trend)
@@ -82,9 +135,7 @@ class StepsWidgetStateLoaderTest {
 
     @Test
     fun `reports no data rather than an average of zero`() = runTest {
-        val repository = FakeStepsRepository(steps = emptyList())
-
-        val state = loader(repository).load(today = wednesday)
+        val state = loader(FakeStepsRepository(steps = emptyList())).load(today, goal)
 
         assertTrue(state is StepsWidgetState.NoData)
     }
@@ -93,30 +144,13 @@ class StepsWidgetStateLoaderTest {
     fun `falls back to asking for permission when it is revoked mid-read`() = runTest {
         val repository = FakeStepsRepository(failWith = SecurityException("revoked"))
 
-        val state = loader(repository).load(today = monday)
-
-        assertEquals(StepsWidgetState.PermissionRequired, state)
+        assertEquals(StepsWidgetState.PermissionRequired, loader(repository).load(today, goal))
     }
 
     @Test
     fun `surfaces an error instead of crashing the widget`() = runTest {
         val repository = FakeStepsRepository(failWith = IllegalStateException("provider died"))
 
-        val state = loader(repository).load(today = monday)
-
-        assertEquals(StepsWidgetState.Error(summary = null), state)
-    }
-
-    @Test
-    fun `follows a sunday-start locale`() = runTest {
-        val sunday = monday.minusDays(1)
-        val repository = FakeStepsRepository(steps = listOf(DailySteps(sunday, 8000)))
-
-        val state = StepsWidgetStateLoader(repository, firstDayOfWeek = DayOfWeek.SUNDAY)
-            .load(today = monday) as StepsWidgetState.Ready
-
-        assertEquals(sunday, state.summary.weekStart)
-        assertEquals(2, state.summary.elapsedDays)
-        assertEquals(4000L, state.summary.averageStepsPerDay) // 8000 over Sun + Mon
+        assertEquals(StepsWidgetState.Error, loader(repository).load(today, goal))
     }
 }

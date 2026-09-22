@@ -1,36 +1,26 @@
 package agency.dynamicdata.steps.core
 
 /**
- * What the weekly average is divided by.
+ * What the average is divided by.
  *
- * "Average steps per day" is ambiguous the moment the week is incomplete, and the
- * three sensible readings give very different numbers. Making the choice explicit
- * keeps the widget honest about which one it is showing.
+ * Every day in a rolling window has already finished, so the only question left is
+ * how a day the provider never reported should count. The two answers give different
+ * numbers and it is worth being explicit about which one is on screen.
  */
 enum class AverageBasis {
     /**
-     * Divide by every day in the week (always 7).
+     * Divide by every day in the window.
      *
-     * Comparable week over week, but on a Monday it reports roughly one seventh of
-     * a normal week and looks like a collapse in activity.
+     * The default. An untracked day counts as zero, so leaving the phone at home does
+     * lower the average — which is the truthful reading of "steps per day".
      */
-    CALENDAR_DAYS,
-
-    /**
-     * Divide by the days of the week that have already happened, capped at today.
-     *
-     * The default. Days with no reported data still count as zero, so leaving the
-     * phone at home does lower the average — which is the truthful reading of
-     * "steps per day so far this week".
-     */
-    ELAPSED_DAYS,
+    ALL_DAYS,
 
     /**
      * Divide only by days the provider actually reported.
      *
-     * Answers "on days I tracked, how much did I walk" and is the right basis when
-     * tracking coverage is patchy, but it can not be compared across weeks with
-     * different coverage.
+     * Answers "on days I tracked, how much did I walk". Useful when tracking coverage
+     * is patchy, but two windows with different coverage cannot be compared.
      */
     DAYS_WITH_DATA,
 }

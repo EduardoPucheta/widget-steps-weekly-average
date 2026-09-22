@@ -1,7 +1,7 @@
 package agency.dynamicdata.steps.health
 
 import agency.dynamicdata.steps.core.DailySteps
-import agency.dynamicdata.steps.core.WeekWindow
+import agency.dynamicdata.steps.core.StepsWindow
 
 /**
  * Source of daily step totals.
@@ -22,7 +22,7 @@ interface StepsRepository {
      *
      * @throws SecurityException if read permission was revoked since it was checked.
      */
-    suspend fun dailySteps(window: WeekWindow): List<DailySteps>
+    suspend fun dailySteps(window: StepsWindow): List<DailySteps>
 }
 
 enum class HealthConnectAvailability {

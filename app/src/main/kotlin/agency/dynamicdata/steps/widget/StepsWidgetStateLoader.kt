@@ -1,13 +1,14 @@
 package agency.dynamicdata.steps.widget
 
 import agency.dynamicdata.steps.core.AverageBasis
-import agency.dynamicdata.steps.core.WeekOverWeekTrend
-import agency.dynamicdata.steps.core.WeekWindow
-import agency.dynamicdata.steps.core.WeeklyStepsCalculator
+import agency.dynamicdata.steps.core.GoalProgress
+import agency.dynamicdata.steps.core.StepGoal
+import agency.dynamicdata.steps.core.StepsAverageCalculator
+import agency.dynamicdata.steps.core.StepsTrend
+import agency.dynamicdata.steps.core.StepsWindow
 import agency.dynamicdata.steps.health.HealthConnectAvailability
 import agency.dynamicdata.steps.health.StepsRepository
 import android.util.Log
-import java.time.DayOfWeek
 import java.time.LocalDate
 
 /**
@@ -18,12 +19,12 @@ import java.time.LocalDate
  */
 class StepsWidgetStateLoader(
     private val repository: StepsRepository,
-    private val firstDayOfWeek: DayOfWeek,
-    basis: AverageBasis = AverageBasis.ELAPSED_DAYS,
+    private val days: Int = StepsWindow.DEFAULT_DAYS,
+    basis: AverageBasis = AverageBasis.ALL_DAYS,
 ) {
-    private val calculator = WeeklyStepsCalculator(firstDayOfWeek, basis)
+    private val calculator = StepsAverageCalculator(days, basis)
 
-    suspend fun load(today: LocalDate): StepsWidgetState {
+    suspend fun load(today: LocalDate, goal: StepGoal): StepsWidgetState {
         when (repository.availability()) {
             HealthConnectAvailability.NOT_SUPPORTED ->
                 return StepsWidgetState.HealthConnectUnavailable(updatable = false)
@@ -34,20 +35,23 @@ class StepsWidgetStateLoader(
 
         if (!repository.hasReadPermission()) return StepsWidgetState.PermissionRequired
 
-        val thisWeek = WeekWindow.containing(today, firstDayOfWeek)
-        val lastWeek = WeekWindow.before(today, firstDayOfWeek, weeksAgo = 1)
+        val window = StepsWindow.lastCompleteDays(today, days)
+        val preceding = window.preceding()
 
         return try {
-            // Last week is read alongside this one so the widget can show a trend;
-            // both summaries are then derived from the same list.
-            val history = repository.dailySteps(lastWeek) + repository.dailySteps(thisWeek)
+            // The preceding window is read alongside the current one so the widget can
+            // show a trend; both summaries then come from the same list.
+            val history = repository.dailySteps(preceding) + repository.dailySteps(window)
 
-            val summary = calculator.summarize(history, thisWeek, today)
+            val summary = calculator.summarize(history, window)
             if (summary.hasNoData) {
                 StepsWidgetState.NoData(summary)
             } else {
-                val previous = calculator.summarize(history, lastWeek, today)
-                StepsWidgetState.Ready(summary, WeekOverWeekTrend.of(summary, previous))
+                StepsWidgetState.Ready(
+                    summary = summary,
+                    progress = GoalProgress(goal, summary.averageStepsPerDay),
+                    trend = StepsTrend.of(summary, calculator.summarize(history, preceding)),
+                )
             }
         } catch (e: SecurityException) {
             // Permission revoked between the check above and the read.
@@ -55,7 +59,7 @@ class StepsWidgetStateLoader(
             StepsWidgetState.PermissionRequired
         } catch (e: Exception) {
             Log.e(TAG, "step read failed", e)
-            StepsWidgetState.Error(summary = null)
+            StepsWidgetState.Error
         }
     }
 

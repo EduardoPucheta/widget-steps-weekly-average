@@ -67,6 +67,9 @@ dependencies {
     // WorkManager: refreshes the widget on a schedule the system can batch.
     implementation(libs.androidx.work.runtime.ktx)
 
+    // DataStore: holds the step goal, readable from both the app and the widget.
+    implementation(libs.androidx.datastore.preferences)
+
     // The in-app screen that explains the widget and requests permission.
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))

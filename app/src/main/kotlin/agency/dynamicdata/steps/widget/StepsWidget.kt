@@ -1,7 +1,8 @@
 package agency.dynamicdata.steps.widget
 
-import agency.dynamicdata.steps.core.WeekOverWeekTrend
+import agency.dynamicdata.steps.core.StepsTrend
 import agency.dynamicdata.steps.health.HealthConnectStepsRepository
+import agency.dynamicdata.steps.settings.StepGoalStore
 import agency.dynamicdata.steps.ui.MainActivity
 import android.content.Context
 import androidx.compose.runtime.Composable
@@ -12,16 +13,18 @@ import androidx.glance.GlanceModifier
 import androidx.glance.GlanceTheme
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
+import androidx.glance.appwidget.LinearProgressIndicator
 import androidx.glance.appwidget.SizeMode
-import androidx.glance.action.actionStartActivity
 import androidx.glance.appwidget.cornerRadius
 import androidx.glance.appwidget.provideContent
+import androidx.glance.action.actionStartActivity
 import androidx.glance.background
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Column
 import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
 import androidx.glance.layout.fillMaxSize
+import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
 import androidx.glance.layout.padding
 import androidx.glance.layout.width
@@ -31,12 +34,11 @@ import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
-import java.time.DayOfWeek
-import java.time.temporal.WeekFields
 import java.util.Locale
 
 /**
- * The home-screen widget: average steps per day for the current week.
+ * The home-screen widget: average steps per day over the last seven complete days,
+ * measured against the user's daily goal.
  *
  * The state is computed before `provideContent` rather than inside a composable,
  * because a widget is rendered once per update rather than continuously recomposed —
@@ -49,12 +51,12 @@ class StepsWidget : GlanceAppWidget() {
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val repository = HealthConnectStepsRepository(context)
         val locale = context.resources.configuration.locales[0] ?: Locale.getDefault()
-        val loader = StepsWidgetStateLoader(
-            repository = repository,
-            firstDayOfWeek = firstDayOfWeek(locale),
-        )
+        val goal = StepGoalStore(context).current()
 
-        val state = loader.load(today = repository.today())
+        val state = StepsWidgetStateLoader(repository).load(
+            today = repository.today(),
+            goal = goal,
+        )
 
         provideContent {
             GlanceTheme {
@@ -62,13 +64,6 @@ class StepsWidget : GlanceAppWidget() {
             }
         }
     }
-
-    /**
-     * The locale's own first day of week, so the widget agrees with the user's
-     * calendar rather than imposing Monday on a Sunday-start locale.
-     */
-    private fun firstDayOfWeek(locale: Locale): DayOfWeek =
-        WeekFields.of(locale).firstDayOfWeek
 }
 
 @Composable
@@ -96,7 +91,7 @@ private fun StepsWidgetContent(state: StepsWidgetState, locale: Locale) {
 
             is StepsWidgetState.PermissionRequired -> Message("Tap to allow step access")
 
-            is StepsWidgetState.NoData -> Message("No steps recorded this week")
+            is StepsWidgetState.NoData -> Message("No steps recorded in the last 7 days")
 
             is StepsWidgetState.Error -> Message("Couldn't read your steps. Tap to retry.")
 
@@ -108,26 +103,34 @@ private fun StepsWidgetContent(state: StepsWidgetState, locale: Locale) {
 @Composable
 private fun ReadyContent(state: StepsWidgetState.Ready, locale: Locale) {
     val summary = state.summary
-    val exact = StepsWidgetFormat.exact(summary.averageStepsPerDay, locale)
-    val weekRange = StepsWidgetFormat.weekRange(summary, locale)
+    val progress = state.progress
 
     Column(
-        // One description for the whole tile: a screen reader should read a sentence,
-        // not four disconnected fragments.
-        modifier = GlanceModifier.semantics {
-            contentDescription = "$exact steps per day on average, week of $weekRange"
-        },
+        modifier = GlanceModifier
+            .fillMaxWidth()
+            // One description for the whole tile: a screen reader should read a
+            // sentence, not six disconnected fragments.
+            .semantics {
+                contentDescription = buildString {
+                    append(StepsWidgetFormat.exact(summary.averageStepsPerDay, locale))
+                    append(" steps per day on average over the last ")
+                    append(summary.dayCount)
+                    append(" days, ")
+                    append(StepsWidgetFormat.goalSpoken(progress, locale))
+                }
+            },
     ) {
         Text(
-            text = "Weekly average",
+            text = StepsWidgetFormat.windowLabel(summary),
             style = TextStyle(fontSize = 12.sp, color = GlanceTheme.colors.onSurfaceVariant),
         )
         Spacer(GlanceModifier.height(2.dp))
+
         Row(verticalAlignment = Alignment.Vertical.Bottom) {
             Text(
                 text = StepsWidgetFormat.compact(summary.averageStepsPerDay, locale),
                 style = TextStyle(
-                    fontSize = 32.sp,
+                    fontSize = 30.sp,
                     fontWeight = FontWeight.Bold,
                     color = GlanceTheme.colors.onSurface,
                 ),
@@ -144,12 +147,32 @@ private fun ReadyContent(state: StepsWidgetState.Ready, locale: Locale) {
                 )
             }
         }
+
+        Spacer(GlanceModifier.height(6.dp))
+        LinearProgressIndicator(
+            // Clamped at the source, so passing the goal fills the bar rather than
+            // drawing past the end of its own track.
+            progress = progress.barFraction,
+            modifier = GlanceModifier.fillMaxWidth().height(6.dp).cornerRadius(3.dp),
+            color = if (progress.isMet) GlanceTheme.colors.primary else GlanceTheme.colors.secondary,
+            backgroundColor = GlanceTheme.colors.surfaceVariant,
+        )
+        Spacer(GlanceModifier.height(4.dp))
+
         Text(
-            text = StepsWidgetFormat.basisLabel(summary),
-            style = TextStyle(fontSize = 12.sp, color = GlanceTheme.colors.onSurfaceVariant),
+            text = StepsWidgetFormat.goal(progress, locale),
+            style = TextStyle(
+                fontSize = 12.sp,
+                fontWeight = if (progress.isMet) FontWeight.Medium else FontWeight.Normal,
+                color = if (progress.isMet) {
+                    GlanceTheme.colors.primary
+                } else {
+                    GlanceTheme.colors.onSurfaceVariant
+                },
+            ),
         )
         Text(
-            text = weekRange,
+            text = StepsWidgetFormat.windowRange(summary, locale),
             style = TextStyle(fontSize = 11.sp, color = GlanceTheme.colors.onSurfaceVariant),
         )
     }
@@ -160,10 +183,10 @@ private fun ReadyContent(state: StepsWidgetState.Ready, locale: Locale) {
  * text, so the widget still reads correctly without colour vision.
  */
 @Composable
-private fun trendColor(trend: WeekOverWeekTrend): ColorProvider = when (trend.direction) {
-    WeekOverWeekTrend.Direction.UP -> GlanceTheme.colors.primary
-    WeekOverWeekTrend.Direction.DOWN -> GlanceTheme.colors.error
-    WeekOverWeekTrend.Direction.FLAT -> GlanceTheme.colors.onSurfaceVariant
+private fun trendColor(trend: StepsTrend): ColorProvider = when (trend.direction) {
+    StepsTrend.Direction.UP -> GlanceTheme.colors.primary
+    StepsTrend.Direction.DOWN -> GlanceTheme.colors.error
+    StepsTrend.Direction.FLAT -> GlanceTheme.colors.onSurfaceVariant
 }
 
 @Composable

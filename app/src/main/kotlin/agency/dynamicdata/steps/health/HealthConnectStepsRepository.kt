@@ -1,7 +1,7 @@
 package agency.dynamicdata.steps.health
 
 import agency.dynamicdata.steps.core.DailySteps
-import agency.dynamicdata.steps.core.WeekWindow
+import agency.dynamicdata.steps.core.StepsWindow
 import android.content.Context
 import android.util.Log
 import androidx.health.connect.client.HealthConnectClient
@@ -53,7 +53,7 @@ class HealthConnectStepsRepository(
             .contains(READ_STEPS)
     }
 
-    override suspend fun dailySteps(window: WeekWindow): List<DailySteps> = withContext(io) {
+    override suspend fun dailySteps(window: StepsWindow): List<DailySteps> = withContext(io) {
         val client = client ?: return@withContext emptyList()
 
         // Local date-times, not instants: a "day" of steps is the user's calendar day.

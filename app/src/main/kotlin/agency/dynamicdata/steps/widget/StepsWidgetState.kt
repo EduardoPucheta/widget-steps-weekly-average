@@ -1,7 +1,8 @@
 package agency.dynamicdata.steps.widget
 
-import agency.dynamicdata.steps.core.WeekOverWeekTrend
-import agency.dynamicdata.steps.core.WeeklyStepsSummary
+import agency.dynamicdata.steps.core.GoalProgress
+import agency.dynamicdata.steps.core.StepsSummary
+import agency.dynamicdata.steps.core.StepsTrend
 
 /**
  * Everything the widget can be showing.
@@ -21,15 +22,16 @@ sealed interface StepsWidgetState {
     /** Installed, but the user has not granted step access yet — tapping opens the app. */
     data object PermissionRequired : StepsWidgetState
 
-    /** Permission is granted but nothing was reported this week. */
-    data class NoData(val summary: WeeklyStepsSummary) : StepsWidgetState
+    /** Permission is granted but nothing was reported in the window. */
+    data class NoData(val summary: StepsSummary) : StepsWidgetState
 
     /** The normal case. */
     data class Ready(
-        val summary: WeeklyStepsSummary,
-        val trend: WeekOverWeekTrend?,
+        val summary: StepsSummary,
+        val progress: GoalProgress,
+        val trend: StepsTrend?,
     ) : StepsWidgetState
 
-    /** A read failed. The last good [summary] is kept so the widget does not go blank. */
-    data class Error(val summary: WeeklyStepsSummary?) : StepsWidgetState
+    /** A read failed. */
+    data object Error : StepsWidgetState
 }

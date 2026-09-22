@@ -3,10 +3,8 @@ package agency.dynamicdata.steps.widget
 import agency.dynamicdata.steps.core.AverageBasis
 import agency.dynamicdata.steps.core.GoalProgress
 import agency.dynamicdata.steps.core.StepsSummary
-import agency.dynamicdata.steps.core.StepsTrend
 import java.time.format.DateTimeFormatter
 import java.util.Locale
-import kotlin.math.abs
 
 /**
  * Number and date formatting for the widget.
@@ -46,18 +44,6 @@ object StepsWidgetFormat {
         val sameMonth = summary.window.start.month == summary.window.end.month
         val start = if (sameMonth) dayOnly else dayAndMonth
         return "${summary.window.start.format(start)}–${summary.window.end.format(dayAndMonth)}"
-    }
-
-    /** "+12%", or "+400" when the previous window averaged zero and a percent is undefined. */
-    fun trend(trend: StepsTrend, locale: Locale): String {
-        val sign = when {
-            trend.deltaSteps > 0 -> "+"
-            trend.deltaSteps < 0 -> "−"
-            else -> ""
-        }
-        val fraction = trend.deltaFraction
-            ?: return "$sign${exact(abs(trend.deltaSteps), locale)}"
-        return String.format(locale, "%s%.0f%%", sign, abs(fraction) * 100)
     }
 
     /**

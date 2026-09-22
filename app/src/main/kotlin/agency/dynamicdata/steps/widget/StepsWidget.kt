@@ -1,6 +1,5 @@
 package agency.dynamicdata.steps.widget
 
-import agency.dynamicdata.steps.core.StepsTrend
 import agency.dynamicdata.steps.health.HealthConnectStepsRepository
 import agency.dynamicdata.steps.settings.StepGoalStore
 import agency.dynamicdata.steps.ui.MainActivity
@@ -10,35 +9,36 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
-import androidx.glance.GlanceTheme
+import androidx.glance.Image
+import androidx.glance.ImageProvider
+import androidx.glance.LocalSize
+import androidx.glance.action.actionStartActivity
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
-import androidx.glance.appwidget.LinearProgressIndicator
 import androidx.glance.appwidget.SizeMode
-import androidx.glance.appwidget.cornerRadius
 import androidx.glance.appwidget.provideContent
-import androidx.glance.action.actionStartActivity
-import androidx.glance.background
 import androidx.glance.layout.Alignment
+import androidx.glance.layout.Box
 import androidx.glance.layout.Column
 import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
 import androidx.glance.layout.fillMaxSize
-import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
 import androidx.glance.layout.padding
+import androidx.glance.layout.size
 import androidx.glance.layout.width
 import androidx.glance.semantics.contentDescription
 import androidx.glance.semantics.semantics
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
+import androidx.glance.text.TextAlign
 import androidx.glance.text.TextStyle
-import androidx.glance.unit.ColorProvider
 import java.util.Locale
+import kotlin.math.min
 
 /**
- * The home-screen widget: average steps per day over the last seven complete days,
- * measured against the user's daily goal.
+ * The home-screen widget: a ring showing the average steps per day over the last
+ * seven complete days, filled toward the user's daily goal.
  *
  * The state is computed before `provideContent` rather than inside a composable,
  * because a widget is rendered once per update rather than continuously recomposed —
@@ -46,6 +46,7 @@ import java.util.Locale
  */
 class StepsWidget : GlanceAppWidget() {
 
+    /** Exact, so [LocalSize] reports the real size the ring has to be drawn at. */
     override val sizeMode: SizeMode = SizeMode.Exact
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
@@ -58,141 +59,154 @@ class StepsWidget : GlanceAppWidget() {
             goal = goal,
         )
 
-        provideContent {
-            GlanceTheme {
-                StepsWidgetContent(state, locale)
-            }
-        }
+        // Density, locale and theme are read here, outside the composition. Glance
+        // renders once per update, so reading resources inside a composable buys
+        // nothing and trips lint for good reason.
+        val density = context.resources.displayMetrics.density
+        val night = context.isNightMode()
+
+        provideContent { StepsRing(state, locale, density, night) }
     }
 }
 
 @Composable
-private fun StepsWidgetContent(state: StepsWidgetState, locale: Locale) {
-    Column(
+private fun StepsRing(
+    state: StepsWidgetState,
+    locale: Locale,
+    density: Float,
+    night: Boolean,
+) {
+    val size = LocalSize.current
+    // The ring is a circle, so it is sized by the shorter side: on a widget the user
+    // has stretched, the disc stays round instead of becoming an ellipse.
+    val sidePx = (min(size.width.value, size.height.value) * density).toInt()
+
+    val ready = state as? StepsWidgetState.Ready
+
+    Box(
         modifier = GlanceModifier
             .fillMaxSize()
-            .background(GlanceTheme.colors.widgetBackground)
-            .cornerRadius(16.dp)
-            .padding(12.dp)
             .clickable(actionStartActivity<MainActivity>()),
-        verticalAlignment = Alignment.Vertical.CenterVertically,
-        horizontalAlignment = Alignment.Horizontal.Start,
+        contentAlignment = Alignment.Center,
     ) {
-        when (state) {
-            is StepsWidgetState.Loading -> Message("Reading steps…")
+        Image(
+            provider = ImageProvider(
+                StepsRingRenderer.render(
+                    sidePx = sidePx,
+                    fraction = ready?.progress?.barFraction ?: 0f,
+                    overflowFraction = ready?.progress?.overflowFraction ?: 0f,
+                    goalMet = ready?.progress?.isMet == true,
+                    night = night,
+                    // Without a reading there is nothing to be part-way through, so
+                    // the empty track is left off rather than implying a real zero.
+                    showTrack = ready != null,
+                ),
+            ),
+            contentDescription = null,
+            modifier = GlanceModifier.size((sidePx / density).dp),
+        )
 
-            is StepsWidgetState.HealthConnectUnavailable -> Message(
-                if (state.updatable) {
-                    "Update Health Connect to see your steps"
-                } else {
-                    "Health Connect isn't available on this device"
-                },
-            )
-
-            is StepsWidgetState.PermissionRequired -> Message("Tap to allow step access")
-
-            is StepsWidgetState.NoData -> Message("No steps recorded in the last 7 days")
-
-            is StepsWidgetState.Error -> Message("Couldn't read your steps. Tap to retry.")
-
-            is StepsWidgetState.Ready -> ReadyContent(state, locale)
+        // The ring's own padding keeps the text clear of the stroke.
+        Box(
+            modifier = GlanceModifier.fillMaxSize().padding(horizontal = 18.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (ready != null) ReadyFace(ready, locale, night) else StatusFace(state, night)
         }
     }
 }
 
 @Composable
-private fun ReadyContent(state: StepsWidgetState.Ready, locale: Locale) {
+private fun ReadyFace(state: StepsWidgetState.Ready, locale: Locale, night: Boolean) {
     val summary = state.summary
     val progress = state.progress
 
     Column(
-        modifier = GlanceModifier
-            .fillMaxWidth()
-            // One description for the whole tile: a screen reader should read a
-            // sentence, not six disconnected fragments.
-            .semantics {
-                contentDescription = buildString {
-                    append(StepsWidgetFormat.exact(summary.averageStepsPerDay, locale))
-                    append(" steps per day on average over the last ")
-                    append(summary.dayCount)
-                    append(" days, ")
-                    append(StepsWidgetFormat.goalSpoken(progress, locale))
-                }
-            },
+        horizontalAlignment = Alignment.Horizontal.CenterHorizontally,
+        modifier = GlanceModifier.semantics {
+            contentDescription = buildString {
+                append(StepsWidgetFormat.exact(summary.averageStepsPerDay, locale))
+                append(" steps per day on average over the last ")
+                append(summary.dayCount)
+                append(" days, ")
+                append(StepsWidgetFormat.goalSpoken(progress, locale))
+            }
+        },
     ) {
         Text(
-            text = StepsWidgetFormat.windowLabel(summary),
-            style = TextStyle(fontSize = 12.sp, color = GlanceTheme.colors.onSurfaceVariant),
+            text = "${summary.dayCount}-day avg",
+            style = TextStyle(
+                fontSize = 11.sp,
+                textAlign = TextAlign.Center,
+                color = StepsRingPalette.onSurfaceVariant.toColorProvider(night),
+            ),
         )
-        Spacer(GlanceModifier.height(2.dp))
-
-        Row(verticalAlignment = Alignment.Vertical.Bottom) {
+        Text(
+            text = StepsWidgetFormat.compact(summary.averageStepsPerDay, locale),
+            style = TextStyle(
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+                color = StepsRingPalette.onSurface.toColorProvider(night),
+            ),
+        )
+        Row(verticalAlignment = Alignment.Vertical.CenterVertically) {
             Text(
-                text = StepsWidgetFormat.compact(summary.averageStepsPerDay, locale),
+                text = "of ${StepsWidgetFormat.compact(progress.goal.stepsPerDay, locale)}",
                 style = TextStyle(
-                    fontSize = 30.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = GlanceTheme.colors.onSurface,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = if (progress.isMet) {
+                        StepsRingPalette.accentMet.toColorProvider(night)
+                    } else {
+                        StepsRingPalette.accent.toColorProvider(night)
+                    },
                 ),
             )
             state.trend?.let { trend ->
-                Spacer(GlanceModifier.width(6.dp))
+                Spacer(GlanceModifier.width(5.dp))
                 Text(
                     text = StepsWidgetFormat.trend(trend, locale),
+                    // Deliberately muted rather than red or green. The ring already
+                    // carries how you are doing; a small week-on-week wobble should
+                    // not be the loudest thing on a widget that is past its goal.
                     style = TextStyle(
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = trendColor(trend),
+                        fontSize = 11.sp,
+                        color = StepsRingPalette.onSurfaceVariant.toColorProvider(night),
                     ),
                 )
             }
         }
-
-        Spacer(GlanceModifier.height(6.dp))
-        LinearProgressIndicator(
-            // Clamped at the source, so passing the goal fills the bar rather than
-            // drawing past the end of its own track.
-            progress = progress.barFraction,
-            modifier = GlanceModifier.fillMaxWidth().height(6.dp).cornerRadius(3.dp),
-            color = if (progress.isMet) GlanceTheme.colors.primary else GlanceTheme.colors.secondary,
-            backgroundColor = GlanceTheme.colors.surfaceVariant,
-        )
-        Spacer(GlanceModifier.height(4.dp))
-
-        Text(
-            text = StepsWidgetFormat.goal(progress, locale),
-            style = TextStyle(
-                fontSize = 12.sp,
-                fontWeight = if (progress.isMet) FontWeight.Medium else FontWeight.Normal,
-                color = if (progress.isMet) {
-                    GlanceTheme.colors.primary
-                } else {
-                    GlanceTheme.colors.onSurfaceVariant
-                },
-            ),
-        )
-        Text(
-            text = StepsWidgetFormat.windowRange(summary, locale),
-            style = TextStyle(fontSize = 11.sp, color = GlanceTheme.colors.onSurfaceVariant),
-        )
     }
 }
 
 /**
- * Colour reinforces the trend, it does not carry it — the sign is already in the
- * text, so the widget still reads correctly without colour vision.
+ * Anything that is not a reading.
+ *
+ * The messages are terse because they have to fit inside a circle; tapping opens the
+ * app, which has room to explain properly.
  */
 @Composable
-private fun trendColor(trend: StepsTrend): ColorProvider = when (trend.direction) {
-    StepsTrend.Direction.UP -> GlanceTheme.colors.primary
-    StepsTrend.Direction.DOWN -> GlanceTheme.colors.error
-    StepsTrend.Direction.FLAT -> GlanceTheme.colors.onSurfaceVariant
-}
+private fun StatusFace(state: StepsWidgetState, night: Boolean) {
+    val message = when (state) {
+        is StepsWidgetState.Loading -> "Reading…"
+        is StepsWidgetState.HealthConnectUnavailable ->
+            if (state.updatable) "Update\nHealth Connect" else "Not\nsupported"
+        is StepsWidgetState.PermissionRequired -> "Tap to allow\nstep access"
+        is StepsWidgetState.NoData -> "No steps\nin 7 days"
+        is StepsWidgetState.Error -> "Tap to\nretry"
+        is StepsWidgetState.Ready -> return
+    }
 
-@Composable
-private fun Message(text: String) {
-    Text(
-        text = text,
-        style = TextStyle(fontSize = 14.sp, color = GlanceTheme.colors.onSurface),
-    )
+    Column(horizontalAlignment = Alignment.Horizontal.CenterHorizontally) {
+        Text(
+            text = message,
+            style = TextStyle(
+                fontSize = 12.sp,
+                textAlign = TextAlign.Center,
+                color = StepsRingPalette.onSurfaceVariant.toColorProvider(night),
+            ),
+        )
+        Spacer(GlanceModifier.height(0.dp))
+    }
 }

@@ -51,6 +51,27 @@ class GoalProgressTest {
     }
 
     @Test
+    fun `beating the goal starts a second lap`() {
+        // 140% of the goal: the first lap is full, the second is 40% round.
+        val progress = GoalProgress(goal, averageStepsPerDay = 14_000)
+
+        assertEquals(1.0f, progress.barFraction)
+        assertEquals(0.4f, progress.overflowFraction, 1e-6f)
+    }
+
+    @Test
+    fun `there is no second lap until the goal is actually met`() {
+        assertEquals(0.0f, GoalProgress(goal, averageStepsPerDay = 9_999).overflowFraction)
+        assertEquals(0.0f, GoalProgress(goal, averageStepsPerDay = 10_000).overflowFraction)
+    }
+
+    @Test
+    fun `the second lap saturates at twice the goal`() {
+        assertEquals(1.0f, GoalProgress(goal, averageStepsPerDay = 20_000).overflowFraction)
+        assertEquals(1.0f, GoalProgress(goal, averageStepsPerDay = 90_000).overflowFraction)
+    }
+
+    @Test
     fun `an empty week leaves the bar empty rather than undefined`() {
         val progress = GoalProgress(goal, averageStepsPerDay = 0)
 

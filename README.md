@@ -120,17 +120,41 @@ offers the update when a new tag appears.
 identifies an app by package name *plus* signing key, so losing it means you can
 never update this app again, only publish a new one under a different package name.
 
+macOS or Linux:
+
 ```bash
 keytool -genkeypair -v \
   -keystore release.jks -alias weekly-steps \
   -keyalg RSA -keysize 4096 -validity 10000
 ```
 
-**2. Add four repository secrets** (Settings → Secrets and variables → Actions):
+Windows PowerShell — same command, without the line continuations:
+
+```powershell
+keytool -genkeypair -v -keystore release.jks -alias weekly-steps -keyalg RSA -keysize 4096 -validity 10000
+```
+
+Keep the file outside this repository, or at least out of a folder that syncs
+somewhere. `.gitignore` covers `*.jks`, but the safest keystore is one that was
+never in the working tree.
+
+**2. Add four repository secrets** (Settings → Secrets and variables → Actions).
+
+For `KEYSTORE_BASE64`, the file has to become a single line of text:
+
+```bash
+base64 -w0 release.jks                       # Linux
+base64 release.jks | tr -d '\n'              # macOS
+```
+
+```powershell
+# Windows PowerShell — straight onto the clipboard, ready to paste
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("$PWD\release.jks")) | Set-Clipboard
+```
 
 | Secret | Value |
 | --- | --- |
-| `KEYSTORE_BASE64` | `base64 -w0 release.jks` — the whole file, one line |
+| `KEYSTORE_BASE64` | the single line produced above |
 | `KEYSTORE_PASSWORD` | the keystore password from step 1 |
 | `KEY_ALIAS` | `weekly-steps` |
 | `KEY_PASSWORD` | the key password (the same one, unless you set it separately) |

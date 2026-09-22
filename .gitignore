@@ -10,6 +10,15 @@ local.properties
 *.dex
 /captures/
 
+# Signing material. A keystore committed here can never be made secret again:
+# it stays in the history, and the only real fix is a new key, which means a new
+# package name because Android will not accept an update signed differently.
+*.jks
+*.keystore
+*.p12
+*.b64
+keystore.properties
+
 # IDE
 .idea/
 *.iml

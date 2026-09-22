@@ -19,6 +19,7 @@ complete days**, measured against a daily goal. Data comes from Health Connect.
 * Averages the **last 7 complete days, ending yesterday**.
 * Draws that average as a ring filling toward your daily goal.
 * Goal is editable in the app and saved on device; defaults to 10,000.
+* Optional 09:00 reminder, only on the mornings you are **below** the goal.
 * Refreshes every 30 minutes via WorkManager; nothing leaves the device.
 
 ## Layout
@@ -107,6 +108,38 @@ SDK (`sdk.dir=/path/to/android-sdk`), then:
 Without a step provider writing into Health Connect (Fitbit, Google Fit, Samsung
 Health, or the phone's own sensor) the widget correctly shows "No steps recorded in
 the last 7 days" rather than a zero.
+
+## The morning reminder
+
+Off by default. Switched on in the app, it posts a notification at 09:00 **only when
+the 7-day average is below the goal** — no message is the signal that you are on
+track.
+
+It also stays quiet when there is nothing honest to say: no data recorded, step
+access not granted, Health Connect missing, or the read failed. Every one of those is
+a named reason in `ReminderDecision`, and each is logged, because "it didn't notify
+me" and "it wasn't supposed to" are otherwise indistinguishable.
+
+### Why the timing is approximate
+
+The alarm uses `setAndAllowWhileIdle`, so it fires *around* 09:00 rather than exactly
+on it. An exact alarm needs `SCHEDULE_EXACT_ALARM`, which the user must grant by hand
+from Android 12 and which Google restricts to alarm-clock apps — a large ask for a
+nudge that is just as useful at 09:07. In deep doze it may land in the next
+maintenance window.
+
+Nothing is lost by the imprecision: the window ends yesterday, so the average does
+not move during the day. The reminder says exactly what the widget says.
+
+### How it survives
+
+Alarms do not outlive a reboot, and an app update clears them too, so
+`ReminderReceiver` listens for `BOOT_COMPLETED` and `MY_PACKAGE_REPLACED` and re-arms.
+The alarm is also re-armed *before* each run's work begins, so a failure costs one
+quiet morning rather than the whole feature.
+
+The receiver itself only schedules — reading Health Connect can outlast the ten
+seconds a broadcast receiver is given, so the work runs in `ReminderWorker`.
 
 ## Releasing
 

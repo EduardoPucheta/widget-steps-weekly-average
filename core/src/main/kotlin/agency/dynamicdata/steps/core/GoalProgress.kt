@@ -33,6 +33,16 @@ data class GoalProgress(
      */
     val barFraction: Float get() = fraction.coerceIn(0.0, 1.0).toFloat()
 
+    /**
+     * How far past the goal the average goes, as a fraction of a second lap, 0..1.
+     *
+     * A ring clamped at full carries no information once the goal is beaten — 101%
+     * and 300% draw identically. This is what a second lap over the top is drawn
+     * from. It saturates at 200% of the goal, past which the distinction stops
+     * mattering more than the clutter of showing it.
+     */
+    val overflowFraction: Float get() = (fraction - 1.0).coerceIn(0.0, 1.0).toFloat()
+
     /** Whole percent of the goal, uncapped, rounded to nearest. */
     val percentOfGoal: Int get() = Math.round(fraction * 100).toInt()
 }

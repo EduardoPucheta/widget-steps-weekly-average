@@ -4,20 +4,20 @@ An Android home-screen widget showing your **average steps per day over the last
 complete days**, measured against a daily goal. Data comes from Health Connect.
 
 ```
-┌─────────────────────────────┐
-│ 7-day average               │
-│ 8.4k  +12%                  │
-│ ████████████░░░░░           │
-│ 1,600 short of 10k          │
-│ 15–21 Sep                   │
-└─────────────────────────────┘
+        ╭───────────╮
+      ╭─┘           └─╮
+     │    7-day avg    │       ring fills toward the goal;
+     │      14.1k      │       past 100% a second lap is
+     │   of 10k  −1%   │       drawn over a faded first one
+      ╰─┐           ┌─╯
+        ╰───────────╯
 ```
 
 ## What it does
 
 * Reads daily step totals from Health Connect (read-only, step counts only).
 * Averages the **last 7 complete days, ending yesterday**.
-* Compares that average with your daily goal — bar plus the gap in steps.
+* Draws that average as a ring filling toward your daily goal.
 * Shows the change against the 7 days before that.
 * Goal is editable in the app and saved on device; defaults to 10,000.
 * Refreshes every 30 minutes via WorkManager; nothing leaves the device.
@@ -52,6 +52,20 @@ trade — this widget answers "how am I doing lately", not "how am I doing right
 A Mon–Sun average resets every Monday, so on a Monday morning it reports one day of
 data as if it were a week. A rolling window always covers the same amount of time, so
 two readings a day apart are actually comparable.
+
+### Why the ring has two laps
+
+A progress indicator clamped at full stops carrying information the moment the goal
+is beaten: 101% and 300% draw the same picture. Once the average passes the goal the
+first lap fades and a second one is drawn over it, so how far past is still legible.
+It saturates at 200%, beyond which the distinction costs more clutter than it is
+worth.
+
+The ring is rasterised with Canvas and shown as an `Image`, because Glance has no arc
+primitive — its `CircularProgressIndicator` is indeterminate only. The bitmap is
+capped at 512px square: a widget's RemoteViews payload is limited to roughly 1.5 MB
+and a bitmap costs 4 bytes a pixel, so an uncapped one gets the widget dropped by the
+launcher.
 
 ### How missing days count
 

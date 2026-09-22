@@ -2,8 +2,7 @@
 <!-- Shown in the widget picker before the widget is placed and has real data. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item>
-        <shape android:shape="rectangle">
-            <corners android:radius="16dp" />
+        <shape android:shape="oval">
             <solid android:color="@color/widget_preview_background" />
         </shape>
     </item>

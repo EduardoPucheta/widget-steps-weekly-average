@@ -23,8 +23,20 @@ object StepsWidgetFormat {
     /** "8.4k" — the headline. Under 10,000 it stays exact; "8.4k" saves nothing there. */
     fun compact(steps: Long, locale: Locale): String = when {
         steps < 10_000 -> exact(steps, locale)
-        steps < 1_000_000 -> String.format(locale, "%.1fk", steps / 1_000.0)
-        else -> String.format(locale, "%.1fM", steps / 1_000_000.0)
+        steps < 1_000_000 -> scaled(steps / 1_000.0, "k", locale)
+        else -> scaled(steps / 1_000_000.0, "M", locale)
+    }
+
+    /**
+     * One decimal place, dropped when it would be a zero.
+     *
+     * A round goal is the common case and "of 10.0k" reads like a measurement error
+     * rather than a target, so exactly 10,000 renders as "10k".
+     */
+    private fun scaled(value: Double, suffix: String, locale: Locale): String {
+        val rounded = Math.round(value * 10) / 10.0
+        val pattern = if (rounded % 1.0 == 0.0) "%.0f%s" else "%.1f%s"
+        return String.format(locale, pattern, rounded, suffix)
     }
 
     /** "15–21 Sep" — the days the number covers. */

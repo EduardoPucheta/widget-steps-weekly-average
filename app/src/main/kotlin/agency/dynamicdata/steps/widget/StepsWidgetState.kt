@@ -2,7 +2,6 @@ package agency.dynamicdata.steps.widget
 
 import agency.dynamicdata.steps.core.GoalProgress
 import agency.dynamicdata.steps.core.StepsSummary
-import agency.dynamicdata.steps.core.StepsTrend
 
 /**
  * Everything the widget can be showing.
@@ -29,7 +28,6 @@ sealed interface StepsWidgetState {
     data class Ready(
         val summary: StepsSummary,
         val progress: GoalProgress,
-        val trend: StepsTrend?,
     ) : StepsWidgetState
 
     /** A read failed. */

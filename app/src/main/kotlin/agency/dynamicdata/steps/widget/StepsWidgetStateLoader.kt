@@ -4,7 +4,6 @@ import agency.dynamicdata.steps.core.AverageBasis
 import agency.dynamicdata.steps.core.GoalProgress
 import agency.dynamicdata.steps.core.StepGoal
 import agency.dynamicdata.steps.core.StepsAverageCalculator
-import agency.dynamicdata.steps.core.StepsTrend
 import agency.dynamicdata.steps.core.StepsWindow
 import agency.dynamicdata.steps.health.HealthConnectAvailability
 import agency.dynamicdata.steps.health.StepsRepository
@@ -36,21 +35,15 @@ class StepsWidgetStateLoader(
         if (!repository.hasReadPermission()) return StepsWidgetState.PermissionRequired
 
         val window = StepsWindow.lastCompleteDays(today, days)
-        val preceding = window.preceding()
 
         return try {
-            // The preceding window is read alongside the current one so the widget can
-            // show a trend; both summaries then come from the same list.
-            val history = repository.dailySteps(preceding) + repository.dailySteps(window)
-
-            val summary = calculator.summarize(history, window)
+            val summary = calculator.summarize(repository.dailySteps(window), window)
             if (summary.hasNoData) {
                 StepsWidgetState.NoData(summary)
             } else {
                 StepsWidgetState.Ready(
                     summary = summary,
                     progress = GoalProgress(goal, summary.averageStepsPerDay),
-                    trend = StepsTrend.of(summary, calculator.summarize(history, preceding)),
                 )
             }
         } catch (e: SecurityException) {

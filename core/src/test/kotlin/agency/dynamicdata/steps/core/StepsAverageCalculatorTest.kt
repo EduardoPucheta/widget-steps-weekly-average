@@ -74,14 +74,6 @@ class StepsAverageCalculatorTest {
         fun `rejects a window of no days`() {
             assertThrows<IllegalArgumentException> { StepsWindow.lastCompleteDays(today, days = 0) }
         }
-
-        @Test
-        fun `the preceding window is the seven days before`() {
-            val preceding = StepsWindow.lastCompleteDays(today).preceding()
-
-            assertEquals(LocalDate.of(2026, 9, 8), preceding.start)
-            assertEquals(LocalDate.of(2026, 9, 14), preceding.end)
-        }
     }
 
     @Nested

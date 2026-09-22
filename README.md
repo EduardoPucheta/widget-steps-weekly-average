@@ -8,7 +8,7 @@ complete days**, measured against a daily goal. Data comes from Health Connect.
       ╭─┘           └─╮
      │    7-day avg    │       ring fills toward the goal;
      │      14.1k      │       past 100% a second lap is
-     │   of 10k  −1%   │       drawn over a faded first one
+     │      of 10k     │       drawn over a faded first one
       ╰─┐           ┌─╯
         ╰───────────╯
 ```
@@ -18,7 +18,6 @@ complete days**, measured against a daily goal. Data comes from Health Connect.
 * Reads daily step totals from Health Connect (read-only, step counts only).
 * Averages the **last 7 complete days, ending yesterday**.
 * Draws that average as a ring filling toward your daily goal.
-* Shows the change against the 7 days before that.
 * Goal is editable in the app and saved on device; defaults to 10,000.
 * Refreshes every 30 minutes via WorkManager; nothing leaves the device.
 
@@ -26,7 +25,7 @@ complete days**, measured against a daily goal. Data comes from Health Connect.
 
 | Module | What lives there |
 | --- | --- |
-| `core` | Pure Kotlin/JVM. Rolling windows, the averaging rules, goal progress, the trend. No Android imports, so it runs in a plain JVM test. |
+| `core` | Pure Kotlin/JVM. Rolling windows, the averaging rules, goal progress. No Android imports, so it runs in a plain JVM test. |
 | `app` | The Android side: Health Connect access, the Glance widget, goal storage, the setup screen. |
 
 The split is deliberate — all the arithmetic that can be wrong is in `core`, where it
@@ -60,6 +59,12 @@ is beaten: 101% and 300% draw the same picture. Once the average passes the goal
 first lap fades and a second one is drawn over it, so how far past is still legible.
 It saturates at 200%, beyond which the distinction costs more clutter than it is
 worth.
+
+Type is sized as a share of the widget's shorter side rather than in fixed `sp`, so
+the face fills the circle at any size the user drags it to. The ratios are bounded by
+what the widest realistic string — five glyphs, like `14.1k` or `9,999` — can occupy
+on the inner circle's centre line; Glance cannot shrink text to fit, so anything
+wider is clipped rather than scaled.
 
 The ring is rasterised with Canvas and shown as an `Image`, because Glance has no arc
 primitive — its `CircularProgressIndicator` is indeterminate only. The bitmap is

@@ -27,10 +27,6 @@ data class StepsWindow(
 
     operator fun contains(date: LocalDate): Boolean = !date.isBefore(start) && !date.isAfter(end)
 
-    /** The window of the same length immediately before this one, for comparisons. */
-    fun preceding(): StepsWindow =
-        StepsWindow(start.minusDays(dayCount.toLong()), start.minusDays(1))
-
     companion object {
         const val DEFAULT_DAYS: Int = 7
 

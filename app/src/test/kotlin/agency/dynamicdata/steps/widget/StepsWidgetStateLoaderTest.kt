@@ -2,11 +2,9 @@ package agency.dynamicdata.steps.widget
 
 import agency.dynamicdata.steps.core.DailySteps
 import agency.dynamicdata.steps.core.StepGoal
-import agency.dynamicdata.steps.core.StepsTrend
 import agency.dynamicdata.steps.health.HealthConnectAvailability
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDate
@@ -57,16 +55,16 @@ class StepsWidgetStateLoaderTest {
     }
 
     @Test
-    fun `reads the last seven complete days and the seven before them`() = runTest {
+    fun `reads the last seven complete days, and nothing else`() = runTest {
         val repository = FakeStepsRepository()
 
         loader(repository).load(today, goal)
 
-        assertEquals(2, repository.requestedWindows.size)
-        assertEquals(LocalDate.of(2026, 9, 8), repository.requestedWindows[0].start)
-        assertEquals(LocalDate.of(2026, 9, 14), repository.requestedWindows[0].end)
-        assertEquals(LocalDate.of(2026, 9, 15), repository.requestedWindows[1].start)
-        assertEquals(LocalDate.of(2026, 9, 21), repository.requestedWindows[1].end)
+        // One window, one read. Fetching more would spend a Health Connect round
+        // trip per refresh on data the widget does not show.
+        assertEquals(1, repository.requestedWindows.size)
+        assertEquals(LocalDate.of(2026, 9, 15), repository.requestedWindows[0].start)
+        assertEquals(LocalDate.of(2026, 9, 21), repository.requestedWindows[0].end)
     }
 
     @Test
@@ -79,7 +77,7 @@ class StepsWidgetStateLoaderTest {
     }
 
     @Test
-    fun `computes the average and the trend against the previous seven days`() = runTest {
+    fun `computes the average over the window only`() = runTest {
         val repository = FakeStepsRepository(
             steps = sevenDaysFrom(windowStart.minusDays(7), perDay = 6000) +
                 sevenDaysFrom(windowStart, perDay = 9000),
@@ -88,8 +86,6 @@ class StepsWidgetStateLoaderTest {
         val state = loader(repository).load(today, goal) as StepsWidgetState.Ready
 
         assertEquals(9000L, state.summary.averageStepsPerDay)
-        assertEquals(6000L, state.trend!!.previousAverage)
-        assertEquals(StepsTrend.Direction.UP, state.trend!!.direction)
     }
 
     @Test
@@ -121,16 +117,6 @@ class StepsWidgetStateLoaderTest {
         val state = loader(repository).load(today, StepGoal(6000)) as StepsWidgetState.Ready
 
         assertTrue(state.progress.isMet)
-    }
-
-    @Test
-    fun `has no trend when the previous seven days were never tracked`() = runTest {
-        val repository = FakeStepsRepository(steps = sevenDaysFrom(windowStart, perDay = 5000))
-
-        val state = loader(repository).load(today, goal) as StepsWidgetState.Ready
-
-        assertEquals(5000L, state.summary.averageStepsPerDay)
-        assertNull(state.trend)
     }
 
     @Test

@@ -6,7 +6,6 @@ import agency.dynamicdata.steps.ui.MainActivity
 import android.content.Context
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
 import androidx.glance.Image
@@ -20,13 +19,9 @@ import androidx.glance.appwidget.provideContent
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Box
 import androidx.glance.layout.Column
-import androidx.glance.layout.Row
-import androidx.glance.layout.Spacer
 import androidx.glance.layout.fillMaxSize
-import androidx.glance.layout.height
 import androidx.glance.layout.padding
 import androidx.glance.layout.size
-import androidx.glance.layout.width
 import androidx.glance.semantics.contentDescription
 import androidx.glance.semantics.semantics
 import androidx.glance.text.FontWeight
@@ -82,6 +77,7 @@ private fun StepsRing(
     val sidePx = (min(size.width.value, size.height.value) * density).toInt()
 
     val ready = state as? StepsWidgetState.Ready
+    val type = RingType.forSide(sideDp = min(size.width.value, size.height.value))
 
     Box(
         modifier = GlanceModifier
@@ -106,18 +102,27 @@ private fun StepsRing(
             modifier = GlanceModifier.size((sidePx / density).dp),
         )
 
-        // The ring's own padding keeps the text clear of the stroke.
+        // Keeps the text inside the ring's inner circle at any widget size.
         Box(
-            modifier = GlanceModifier.fillMaxSize().padding(horizontal = 18.dp),
+            modifier = GlanceModifier.fillMaxSize().padding(horizontal = type.sidePadding),
             contentAlignment = Alignment.Center,
         ) {
-            if (ready != null) ReadyFace(ready, locale, night) else StatusFace(state, night)
+            if (ready != null) {
+                ReadyFace(ready, locale, night, type)
+            } else {
+                StatusFace(state, night, type)
+            }
         }
     }
 }
 
 @Composable
-private fun ReadyFace(state: StepsWidgetState.Ready, locale: Locale, night: Boolean) {
+private fun ReadyFace(
+    state: StepsWidgetState.Ready,
+    locale: Locale,
+    night: Boolean,
+    type: RingType,
+) {
     val summary = state.summary
     val progress = state.progress
 
@@ -136,7 +141,7 @@ private fun ReadyFace(state: StepsWidgetState.Ready, locale: Locale, night: Bool
         Text(
             text = "${summary.dayCount}-day avg",
             style = TextStyle(
-                fontSize = 11.sp,
+                fontSize = type.label,
                 textAlign = TextAlign.Center,
                 color = StepsRingPalette.onSurfaceVariant.toColorProvider(night),
             ),
@@ -144,39 +149,25 @@ private fun ReadyFace(state: StepsWidgetState.Ready, locale: Locale, night: Bool
         Text(
             text = StepsWidgetFormat.compact(summary.averageStepsPerDay, locale),
             style = TextStyle(
-                fontSize = 28.sp,
+                fontSize = type.number,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center,
                 color = StepsRingPalette.onSurface.toColorProvider(night),
             ),
         )
-        Row(verticalAlignment = Alignment.Vertical.CenterVertically) {
-            Text(
-                text = "of ${StepsWidgetFormat.compact(progress.goal.stepsPerDay, locale)}",
-                style = TextStyle(
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = if (progress.isMet) {
-                        StepsRingPalette.accentMet.toColorProvider(night)
-                    } else {
-                        StepsRingPalette.accent.toColorProvider(night)
-                    },
-                ),
-            )
-            state.trend?.let { trend ->
-                Spacer(GlanceModifier.width(5.dp))
-                Text(
-                    text = StepsWidgetFormat.trend(trend, locale),
-                    // Deliberately muted rather than red or green. The ring already
-                    // carries how you are doing; a small week-on-week wobble should
-                    // not be the loudest thing on a widget that is past its goal.
-                    style = TextStyle(
-                        fontSize = 11.sp,
-                        color = StepsRingPalette.onSurfaceVariant.toColorProvider(night),
-                    ),
-                )
-            }
-        }
+        Text(
+            text = "of ${StepsWidgetFormat.compact(progress.goal.stepsPerDay, locale)}",
+            style = TextStyle(
+                fontSize = type.goal,
+                fontWeight = FontWeight.Medium,
+                textAlign = TextAlign.Center,
+                color = if (progress.isMet) {
+                    StepsRingPalette.accentMet.toColorProvider(night)
+                } else {
+                    StepsRingPalette.accent.toColorProvider(night)
+                },
+            ),
+        )
     }
 }
 
@@ -187,7 +178,7 @@ private fun ReadyFace(state: StepsWidgetState.Ready, locale: Locale, night: Bool
  * app, which has room to explain properly.
  */
 @Composable
-private fun StatusFace(state: StepsWidgetState, night: Boolean) {
+private fun StatusFace(state: StepsWidgetState, night: Boolean, type: RingType) {
     val message = when (state) {
         is StepsWidgetState.Loading -> "Reading…"
         is StepsWidgetState.HealthConnectUnavailable ->
@@ -202,11 +193,10 @@ private fun StatusFace(state: StepsWidgetState, night: Boolean) {
         Text(
             text = message,
             style = TextStyle(
-                fontSize = 12.sp,
+                fontSize = type.goal,
                 textAlign = TextAlign.Center,
                 color = StepsRingPalette.onSurfaceVariant.toColorProvider(night),
             ),
         )
-        Spacer(GlanceModifier.height(0.dp))
     }
 }

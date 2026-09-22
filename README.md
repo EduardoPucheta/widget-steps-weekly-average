@@ -108,6 +108,63 @@ Without a step provider writing into Health Connect (Fitbit, Google Fit, Samsung
 Health, or the phone's own sensor) the widget correctly shows "No steps recorded in
 the last 7 days" rather than a zero.
 
+## Releasing
+
+Builds are published as GitHub Releases and picked up on the phone by
+[Obtainium](https://github.com/ImranR98/Obtainium), which watches the repo and
+offers the update when a new tag appears.
+
+### One-time setup
+
+**1. Create a signing key.** Do this on your own machine and keep the file — Android
+identifies an app by package name *plus* signing key, so losing it means you can
+never update this app again, only publish a new one under a different package name.
+
+```bash
+keytool -genkeypair -v \
+  -keystore release.jks -alias weekly-steps \
+  -keyalg RSA -keysize 4096 -validity 10000
+```
+
+**2. Add four repository secrets** (Settings → Secrets and variables → Actions):
+
+| Secret | Value |
+| --- | --- |
+| `KEYSTORE_BASE64` | `base64 -w0 release.jks` — the whole file, one line |
+| `KEYSTORE_PASSWORD` | the keystore password from step 1 |
+| `KEY_ALIAS` | `weekly-steps` |
+| `KEY_PASSWORD` | the key password (the same one, unless you set it separately) |
+
+**3. Install Obtainium** on the phone, *Add App*, paste this repository's URL. It
+checks on its own and notifies you; installing is one tap. Android will not let any
+app install another silently — only the Play Store can do that.
+
+### Cutting a release
+
+```bash
+git tag v1.0.0 && git push origin v1.0.0
+```
+
+The workflow runs the tests and lint first, builds a signed APK, refuses to continue
+if it turns out debug-signed, and publishes it. `versionName` comes from the tag;
+`versionCode` from the commit count, so it cannot go backwards and strand an update.
+
+### The switch from debug builds
+
+The APKs installed by hand before this were signed with Android's universal debug
+key. A release-signed build is a different identity, so Android will refuse it as an
+update: **uninstall the app once** before installing the first release. The only
+thing lost is the stored goal.
+
+### Minification
+
+`isMinifyEnabled` is off for release. R8 removes what it cannot see being used, and
+the reflective entry points here — the Glance receiver, the WorkManager worker — are
+what it tends to get wrong. `proguard-rules.pro` is meant to cover them, but no
+minified build has been run on a device, and a broken widget arriving through an
+automatic update is worse than a larger download. Worth turning on once a release
+build has been installed and checked.
+
 ## Not done yet
 
 * No instrumented tests — they need a device or emulator with Health Connect installed.

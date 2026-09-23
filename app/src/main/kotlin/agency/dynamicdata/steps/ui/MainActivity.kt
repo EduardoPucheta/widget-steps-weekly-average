@@ -2,6 +2,9 @@ package agency.dynamicdata.steps.ui
 
 import agency.dynamicdata.steps.core.StepGoal
 import agency.dynamicdata.steps.reminder.ReminderSchedule
+import agency.dynamicdata.steps.ui.dashboard.DashboardLoader
+import agency.dynamicdata.steps.ui.dashboard.DashboardSection
+import agency.dynamicdata.steps.ui.dashboard.DashboardState
 import agency.dynamicdata.steps.health.HealthConnectAvailability
 import agency.dynamicdata.steps.health.HealthConnectStepsRepository
 import agency.dynamicdata.steps.settings.SettingsStore
@@ -26,6 +29,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -35,6 +39,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -44,6 +49,7 @@ import androidx.core.net.toUri
 import androidx.glance.appwidget.updateAll
 import androidx.health.connect.client.PermissionController
 import androidx.lifecycle.lifecycleScope
+import java.util.Locale
 import kotlinx.coroutines.launch
 
 /**
@@ -62,6 +68,7 @@ class MainActivity : ComponentActivity() {
     private var permissionDenied by mutableStateOf(false)
     private var reminderOn by mutableStateOf(false)
     private var notificationsBlocked by mutableStateOf(false)
+    private var dashboard by mutableStateOf<DashboardState>(DashboardState.Loading)
     private var goalInput by mutableStateOf("")
     private var savedGoal by mutableStateOf(StepGoal.DEFAULT)
 
@@ -89,6 +96,7 @@ class MainActivity : ComponentActivity() {
             // Redraw either way: a denial should flip the widget to its
             // "tap to allow" state rather than leave a stale number on screen.
             refreshWidget()
+            reloadDashboard()
             permissionDenied =
                 !granted.containsAll(HealthConnectStepsRepository.REQUIRED_PERMISSIONS)
         }
@@ -97,6 +105,7 @@ class MainActivity : ComponentActivity() {
             MaterialTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     SetupScreen(
+                        dashboard = dashboard,
                         availability = repository.availability(),
                         denied = permissionDenied,
                         goalInput = goalInput,
@@ -138,8 +147,19 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         // The user may have granted access in Health Connect's own settings while the
-        // app was backgrounded, so the widget is refreshed on every return.
+        // app was backgrounded, so both the widget and the screen are refreshed on
+        // every return rather than only on first launch.
         refreshWidget()
+        reloadDashboard()
+    }
+
+    private fun reloadDashboard() {
+        lifecycleScope.launch {
+            dashboard = DashboardLoader(repository).load(
+                today = repository.today(),
+                goal = goalStore.currentGoal(),
+            )
+        }
     }
 
     private fun saveGoal() {
@@ -147,6 +167,9 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             goalStore.setGoal(goal)
             savedGoal = goal
+            // The goal moved, so the gap under the headline and the chart's rule are
+            // both stale until this runs.
+            reloadDashboard()
             // The widget renders against the stored goal, so it has to be redrawn
             // here — nothing else observes the change.
             StepsWidget().updateAll(this@MainActivity)
@@ -209,6 +232,7 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 private fun SetupScreen(
+    dashboard: DashboardState,
     availability: HealthConnectAvailability,
     denied: Boolean,
     goalInput: String,
@@ -235,11 +259,18 @@ private fun SetupScreen(
         horizontalAlignment = Alignment.Start,
     ) {
         Text("7-day step average", style = MaterialTheme.typography.headlineSmall)
+
+        DashboardSection(
+            state = dashboard,
+            locale = LocalConfiguration.current.locales[0] ?: Locale.getDefault(),
+        )
+
+        HorizontalDivider()
+
         Text(
-            "The widget shows your average steps per day over the last seven complete " +
-                "days, ending yesterday — today is left out so the number doesn't sag " +
-                "every morning. It reads step counts from Health Connect and nothing " +
-                "else, and the numbers never leave your phone.",
+            "The window is the last seven complete days, ending yesterday — today is " +
+                "left out so the number doesn't sag every morning. Steps are read " +
+                "from Health Connect and nothing else, and never leave your phone.",
             style = MaterialTheme.typography.bodyMedium,
         )
 

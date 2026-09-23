@@ -20,6 +20,8 @@ complete days**, measured against a daily goal. Data comes from Health Connect.
 * Draws that average as a ring filling toward your daily goal.
 * Goal is editable in the app and saved on device; defaults to 10,000.
 * Optional 09:00 reminder, only on the mornings you are **below** the goal.
+* In-app screen with the same number, a bar chart of the seven days, and the exact
+  daily figures.
 * Refreshes every 30 minutes via WorkManager; nothing leaves the device.
 
 ## Layout
@@ -108,6 +110,43 @@ SDK (`sdk.dir=/path/to/android-sdk`), then:
 Without a step provider writing into Health Connect (Fitbit, Google Fit, Samsung
 Health, or the phone's own sensor) the widget correctly shows "No steps recorded in
 the last 7 days" rather than a zero.
+
+## The in-app screen
+
+The widget is a glance; the app is the detail. It shows the same average, the window
+as seven bars against a goal rule, and a list of the exact daily figures.
+
+### Reading the chart
+
+One series, so there is no legend — the heading says what is plotted. No value is
+written on the bars: the list underneath is the exact reading, and a number on every
+bar is noise. The only direct label is the goal rule, because a threshold nobody
+names is just a line. It is dashed for the same reason — this is the one place
+dashing carries meaning rather than adding it.
+
+The y-scale always includes the goal, so the rule stays on screen in a week that
+never came close to it.
+
+### Days with nothing recorded
+
+A day the provider never reported is drawn as a **neutral full-height slot**, not a
+short bar and not an absent one. Both alternatives lie:
+
+* A faded version of the series colour reads as "a small amount of data".
+* Drawing nothing is what a **recorded zero** looks like — someone who genuinely did
+  not move.
+
+The slot is neutral so it cannot be confused with the series at all, and full height
+so it cannot be read as a small value. A caption under the chart says so in words,
+and the list shows "no data" rather than a number.
+
+### Colours
+
+The chart does not reuse the widget ring's colours. A 6dp stroke and a filled bar
+have different requirements: the ring's teal is too low in chroma to read as anything
+but grey once it fills an area, and its dark-mode step is too light for a large
+block. The chart's steps were taken from the same hue and checked against a lightness
+band, a chroma floor and a contrast ratio for each surface — measured, not eyeballed.
 
 ## The morning reminder
 

@@ -86,8 +86,34 @@ private fun ReadyDashboard(state: DashboardState.Ready, locale: Locale) {
 
 @Composable
 private fun Headline(summary: StepsSummary, progress: GoalProgress, locale: Locale) {
-    val average = StepsWidgetFormat.exact(summary.averageStepsPerDay, locale)
     val range = StepsWidgetFormat.windowRange(summary, locale)
+
+    if (summary.hasNoData) {
+        // Nothing recorded means there is no average, not an average of zero. The
+        // number would read "0" and "10,000 short", which is the null-as-zero
+        // mistake the chart below is careful not to make — and would contradict the
+        // widget, which says "No steps in 7 days" for the same week.
+        Column {
+            Text(
+                text = "${summary.dayCount}-day average",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = "Nothing recorded",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                text = "No steps reported for $range, so there is no average to show.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        return
+    }
+
+    val average = StepsWidgetFormat.exact(summary.averageStepsPerDay, locale)
 
     Column(
         modifier = Modifier.semantics {

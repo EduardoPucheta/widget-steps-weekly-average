@@ -113,19 +113,72 @@ the last 7 days" rather than a zero.
 
 ## The in-app screen
 
-The widget is a glance; the app is the detail. It shows the same average, the window
-as seven bars against a goal rule, and a list of the exact daily figures.
+The widget is a glance; the app is the detail. Opening it shows the same number the
+widget does, then the seven days behind it, then the exact figures — and below all
+of that, the settings.
+
+### What is on the screen, top to bottom
+
+1. **The headline.** The 7-day average in large type, and under it one line with
+   the gap to your goal and the dates covered: `1,600 short of 10k · 15–21 Sep`, or
+   `1,200 over 10k`, or `goal met — 10k` when you land on it exactly.
+2. **The chart.** One bar per day, oldest on the left, with a dashed line at your
+   goal labelled on the right.
+3. **A caption**, only when at least one day has nothing recorded, saying what the
+   grey slots mean.
+4. **The day list.** Each date with its exact step count, or `no data`.
+5. **Settings** — the goal, the morning reminder, and step access.
+
+The headline, the bars and the list come from a **single read** of Health Connect,
+so they can never disagree with each other or with the widget.
 
 ### Reading the chart
 
-One series, so there is no legend — the heading says what is plotted. No value is
-written on the bars: the list underneath is the exact reading, and a number on every
-bar is noise. The only direct label is the goal rule, because a threshold nobody
-names is just a line. It is dashed for the same reason — this is the one place
-dashing carries meaning rather than adding it.
+* **Bars** are steps per day. Taller is more.
+* **The dashed line** is your goal. A bar that reaches past it was a day at or
+  above goal; one that stops short was not. That is the whole comparison — there is
+  no colour-coding for it, because position against the line already says it.
+* **Grey full-height slots** are days with nothing recorded. See below; they are not
+  low days.
+* **The letters underneath** are the days of the week in your phone's language and
+  region — `M T W T F S S` in English, `L M X J V S D` in Spain, `L M M J V S D` in
+  Latin American Spanish. Single letters repeat (two T's, two S's, and in Latin
+  America two M's), so the list underneath carries the full date for each day.
+  Because the window rolls, the first bar is whichever day was seven days ago,
+  **not** always Monday.
 
-The y-scale always includes the goal, so the rule stays on screen in a week that
-never came close to it.
+There are no numbers up the side. The top of the scale is set to whichever is
+higher — your goal or your best day — plus a little headroom, so the goal line is
+always on screen even in a week that never came near it. For exact values, read the
+list underneath; that is what it is for.
+
+A few deliberate omissions, so they are not mistaken for gaps:
+
+* **No legend.** There is one series, and the heading already says what it is.
+* **No value written on each bar.** Seven numbers crowded above seven bars is noise,
+  and the list gives them properly.
+* **The goal is the only label on the chart**, because a threshold nobody names is
+  just a line. It is also the only dashed line — dashing is kept for the one thing
+  that is a threshold.
+
+### Why the headline can say "short" when every bar clears the goal
+
+Because days with nothing recorded still count toward the average — as zero. Take a
+week where you walked 12,000 steps Monday to Friday, and the phone recorded nothing
+at the weekend:
+
+| | |
+| --- | --- |
+| Every visible bar | 12,000 — above the 10k line |
+| Total over the window | 60,000 |
+| Divided by all **7** days | **8,571** — shown as `1,429 short of 10k` |
+| Divided by only the 5 recorded days | 12,000 |
+
+The app uses the first: an untracked day counts against you. That is the honest
+reading of "steps per day", and it keeps two weeks with different tracking coverage
+comparable. The grey slots on the chart are there precisely so this case is visible
+rather than baffling. The alternative, dividing only by tracked days, exists in the
+code as `AverageBasis.DAYS_WITH_DATA`, but it is not exposed as a setting.
 
 ### Days with nothing recorded
 
@@ -138,7 +191,39 @@ short bar and not an absent one. Both alternatives lie:
 
 The slot is neutral so it cannot be confused with the series at all, and full height
 so it cannot be read as a small value. A caption under the chart says so in words,
-and the list shows "no data" rather than a number.
+and the list shows `no data` rather than a number.
+
+If **nothing at all** was recorded in the window, the headline says `Nothing
+recorded` instead of showing an average. An average of zero would claim a week of
+not moving; the truth is that there is no reading to average. That matches the
+widget, which says `No steps in 7 days` for the same week, and the morning reminder,
+which stays quiet rather than reporting a shortfall it cannot see.
+
+### When it updates
+
+Every time the app comes to the front, after you grant step access, and after you
+save a new goal. Nothing refreshes while the app sits open, and nothing needs to:
+the window ends yesterday, so the numbers only change at midnight. If you leave the
+app open across midnight, reopen it to move the window forward.
+
+### When there is nothing to chart
+
+| You see | Because |
+| --- | --- |
+| `Reading your steps…` | First load, before Health Connect answers |
+| `Allow step access below…` | Step permission not granted yet, or revoked |
+| `Health Connect needs installing or updating…` | Installed but too old, or missing |
+| `Health Connect isn't supported on this device…` | No Health Connect on this phone at all |
+| `Couldn't read your steps just now…` | The read failed; reopening retries |
+
+Each of these replaces the chart rather than drawing an empty one, so a problem is
+never presented as a week of no steps.
+
+### Accessibility
+
+The chart has a spoken description that reads each day and its value, including
+`no data`. The day list gives every figure as text, so nothing depends on seeing the
+bars or telling colours apart.
 
 ### Colours
 
@@ -147,6 +232,11 @@ have different requirements: the ring's teal is too low in chroma to read as any
 but grey once it fills an area, and its dark-mode step is too light for a large
 block. The chart's steps were taken from the same hue and checked against a lightness
 band, a chroma floor and a contrast ratio for each surface — measured, not eyeballed.
+
+| | Light | Dark |
+| --- | --- | --- |
+| Ring (stroke) | `#00696D` — fails as a fill: chroma 0.08 | `#4FD8DE` — fails as a fill: too light |
+| Chart (bars) | `#0E9299` — passes | `#2BA8AE` — passes |
 
 ## The morning reminder
 

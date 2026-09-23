@@ -32,6 +32,24 @@ class DashboardLoaderTest {
     }
 
     @Test
+    fun `an empty week is flagged as having no data, not an average of zero`() = runTest {
+        // The headline branches on this. Without it, a week with nothing recorded
+        // renders as "0" and "10,000 short of 10k".
+        val state = load(FakeStepsRepository(steps = emptyList())) as DashboardState.Ready
+
+        assertTrue(state.summary.hasNoData)
+    }
+
+    @Test
+    fun `a week with any reading is not flagged as empty`() = runTest {
+        val repository = FakeStepsRepository(steps = listOf(DailySteps(windowStart, 3_000)))
+
+        val state = load(repository) as DashboardState.Ready
+
+        assertEquals(false, state.summary.hasNoData)
+    }
+
+    @Test
     fun `keeps gaps as gaps rather than zeros`() = runTest {
         val repository = FakeStepsRepository(
             steps = listOf(

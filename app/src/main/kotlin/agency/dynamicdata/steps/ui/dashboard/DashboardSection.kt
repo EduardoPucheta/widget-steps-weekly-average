@@ -2,6 +2,7 @@ package agency.dynamicdata.steps.ui.dashboard
 
 import agency.dynamicdata.steps.core.DayEntry
 import agency.dynamicdata.steps.core.GoalProgress
+import agency.dynamicdata.steps.core.MovingAveragePoint
 import agency.dynamicdata.steps.core.StepsSummary
 import agency.dynamicdata.steps.widget.StepsWidgetFormat
 import androidx.compose.foundation.layout.Arrangement
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -18,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -64,6 +67,7 @@ private fun ReadyDashboard(state: DashboardState.Ready, locale: Locale) {
 
     DailyStepsChart(
         days = state.days,
+        movingAverage = state.movingAverage,
         goal = state.progress.goal,
         locale = locale,
         modifier = Modifier.fillMaxWidth(),
@@ -81,7 +85,7 @@ private fun ReadyDashboard(state: DashboardState.Ready, locale: Locale) {
     }
 
     HorizontalDivider()
-    DayList(state.days, locale)
+    DayList(state.days, state.movingAverage, locale)
 }
 
 @Composable
@@ -141,18 +145,35 @@ private fun Headline(summary: StepsSummary, progress: GoalProgress, locale: Loca
 }
 
 /**
- * The exact numbers.
+ * The exact numbers, for both series.
  *
- * The chart is for the shape of the week; this is the reading. It also means every
- * value has a text form, which is what a screen reader and a colour-blind reader
- * both need.
+ * The chart is for the shape of the week; this is the reading. Each row carries the
+ * day's steps and the 7-day average as it stood that day, so every mark on the chart
+ * — bar and line alike — has a text form, which is what a screen reader and a
+ * colour-blind reader both need.
  */
 @Composable
-private fun DayList(days: List<DayEntry>, locale: Locale) {
+private fun DayList(days: List<DayEntry>, movingAverage: List<MovingAveragePoint>, locale: Locale) {
     val format = DateTimeFormatter.ofPattern("EEE d MMM", locale)
 
     Column(modifier = Modifier.fillMaxWidth()) {
-        days.forEach { day ->
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text("Day", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                Text("Steps", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    "7-day avg",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.widthIn(min = AVERAGE_COLUMN),
+                    textAlign = TextAlign.End,
+                )
+            }
+        }
+        days.zip(movingAverage).forEach { (day, average) ->
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -164,21 +185,37 @@ private fun DayList(days: List<DayEntry>, locale: Locale) {
                     text = day.date.format(format),
                     style = MaterialTheme.typography.bodyMedium,
                 )
-                Text(
-                    text = day.steps?.let { StepsWidgetFormat.exact(it, locale) }
-                        ?: "no data",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = if (day.isTracked) FontWeight.Medium else FontWeight.Normal,
-                    color = if (day.isTracked) {
-                        MaterialTheme.colorScheme.onSurface
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = day.steps?.let { StepsWidgetFormat.exact(it, locale) } ?: "no data",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = if (day.isTracked) FontWeight.Medium else FontWeight.Normal,
+                        color = if (day.isTracked) {
+                            MaterialTheme.colorScheme.onSurface
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
+                    Text(
+                        // A dash, not a zero, when the span behind this day had no
+                        // reading — the same gap the line leaves on the chart.
+                        text = average.averageStepsPerDay?.let { StepsWidgetFormat.exact(it, locale) } ?: "—",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.widthIn(min = AVERAGE_COLUMN),
+                        textAlign = TextAlign.End,
+                    )
+                }
             }
         }
     }
 }
+
+/** Keeps the average column aligned whatever the width of each figure. */
+private val AVERAGE_COLUMN = 64.dp
 
 @Composable
 private fun Message(text: String) {

@@ -18,6 +18,14 @@ import androidx.compose.ui.graphics.Color
 data class ChartPalette(
     val bar: Color,
     /**
+     * The moving-average line. Orange against the teal bars: a warm/cool pair that
+     * stays apart under red-green colour blindness (ΔE 15.6 light, 16.7 dark, both
+     * well clear of the 8 target) and clears 3:1 against the surface. That last one
+     * matters more for a 2dp line than for a filled bar — a thin mark needs the
+     * contrast a block gets away without.
+     */
+    val average: Color,
+    /**
      * The unknown-day slot.
      *
      * A neutral shade one step off the surface, not a tint of the series colour. A
@@ -36,6 +44,7 @@ data class ChartPalette(
 
         private val Light = ChartPalette(
             bar = Color(0xFF0E9299),
+            average = Color(0xFFD95926),
             absent = Color(0xFFDBE2DE),
             goalLine = Color(0xFF5A625C),
             axis = Color(0xFFCBD3CD),
@@ -44,6 +53,7 @@ data class ChartPalette(
 
         private val Dark = ChartPalette(
             bar = Color(0xFF2BA8AE),
+            average = Color(0xFFD95926),
             absent = Color(0xFF262D29),
             goalLine = Color(0xFFA8B2AC),
             axis = Color(0xFF39403B),

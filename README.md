@@ -122,19 +122,24 @@ of that, the settings.
 1. **The headline.** The 7-day average in large type, and under it one line with
    the gap to your goal and the dates covered: `1,600 short of 10k · 15–21 Sep`, or
    `1,200 over 10k`, or `goal met — 10k` when you land on it exactly.
-2. **The chart.** One bar per day, oldest on the left, with a dashed line at your
-   goal labelled on the right.
+2. **The chart.** One bar per day, oldest on the left, an orange line for the 7-day
+   average as it stood each day, and a dashed line at your goal. A legend above
+   names the two series; both lines are labelled on the right.
 3. **A caption**, only when at least one day has nothing recorded, saying what the
    grey slots mean.
-4. **The day list.** Each date with its exact step count, or `no data`.
+4. **The day list.** Each date with its exact step count (or `no data`) and the
+   7-day average as it stood that day.
 5. **Settings** — the goal, the morning reminder, and step access.
 
-The headline, the bars and the list come from a **single read** of Health Connect,
-so they can never disagree with each other or with the widget.
+The headline, the bars, the line and the list come from a **single read** of Health
+Connect, so they can never disagree with each other or with the widget.
 
 ### Reading the chart
 
 * **Bars** are steps per day. Taller is more.
+* **The orange line** is the 7-day average — at each day, the average of that day
+  and the six before it. Its right-hand end, marked with a dot and labelled
+  `avg …`, is the headline number.
 * **The dashed line** is your goal. A bar that reaches past it was a day at or
   above goal; one that stops short was not. That is the whole comparison — there is
   no colour-coding for it, because position against the line already says it.
@@ -147,19 +152,56 @@ so they can never disagree with each other or with the widget.
   Because the window rolls, the first bar is whichever day was seven days ago,
   **not** always Monday.
 
-There are no numbers up the side. The top of the scale is set to whichever is
-higher — your goal or your best day — plus a little headroom, so the goal line is
-always on screen even in a week that never came near it. For exact values, read the
-list underneath; that is what it is for.
+There are no numbers up the side. The top of the scale is set to the highest thing
+on the chart — your goal, your best day, or the average line, whichever is highest —
+plus a little headroom, so nothing is ever pushed off the top. For exact values, read
+the list underneath; that is what it is for.
 
 A few deliberate omissions, so they are not mistaken for gaps:
 
-* **No legend.** There is one series, and the heading already says what it is.
-* **No value written on each bar.** Seven numbers crowded above seven bars is noise,
-  and the list gives them properly.
-* **The goal is the only label on the chart**, because a threshold nobody names is
-  just a line. It is also the only dashed line — dashing is kept for the one thing
-  that is a threshold.
+* **No value written on each bar or line point.** Fourteen numbers crowded into
+  a phone-width chart is noise, and the list gives them properly.
+* **Only the ends are labelled** — the goal, and where the average finishes —
+  because those are the two numbers the chart is about. The goal line is the only
+  dashed one; dashing is kept for the one thing that is a threshold.
+* **The goal has no legend entry.** It is a reference, not a series, and its label
+  already names it.
+
+### The moving average
+
+The line answers a question the bars cannot: *which way is it going?* Seven bars
+show seven separate days; the line shows the 7-day average as it stood at the end of
+each of them, so a rising line means the recent days are better than the ones they
+replaced.
+
+**Its last point is the headline, by construction.** Every point is computed by the
+same code that computes the big number, over the seven days ending on that date. The
+last point's seven days *are* the window, so the two cannot disagree — they are not
+two calculations that happen to match.
+
+**Why the app reads 13 days, not 7.** The first point, on the oldest day shown,
+needs the six days before it. So one read fetches 13 days ending yesterday; the bars
+show the last seven, the line uses all of them.
+
+**Why the line can sit above every bar.** After a big week, the early points still
+carry those days, so the line starts high and comes down across a quieter week in
+view. That is the line doing its job — showing a drop the bars alone would hide.
+
+**Grey days and the line.** A single day with nothing recorded does not break the
+line: it counts as zero in that point's average, exactly as it does in the headline.
+The line only breaks where a point's **whole** seven days have nothing recorded —
+there is no average there, and a gap says so where a zero would lie.
+
+**When you have just started tracking**, the first points are low: the days before
+tracking began count as zero, the same as in the headline. The line will look like
+it is climbing when it is really filling in. That follows from keeping the line and
+the headline on one rule; see the next section for why the rule counts untracked days
+at all.
+
+**Labels.** When the average finishes close to your goal, their two labels would land
+on top of each other. They are pushed apart instead, keeping the same order as their
+lines — if the average is above the goal on the chart, its label stays above — so
+each label still matches its line by position.
 
 ### Why the headline can say "short" when every bar clears the goal
 
@@ -221,9 +263,11 @@ never presented as a week of no steps.
 
 ### Accessibility
 
-The chart has a spoken description that reads each day and its value, including
-`no data`. The day list gives every figure as text, so nothing depends on seeing the
-bars or telling colours apart.
+The chart has a spoken description that reads each day, its steps (or `no data`)
+and that day's 7-day average. The day list gives every figure as text, for both
+series, so nothing depends on seeing the chart or telling colours apart. The legend
+swatches mirror the marks — a block for the bars, a line with its dot for the average
+— so the key reads by shape as well as colour.
 
 ### Colours
 
@@ -237,6 +281,17 @@ band, a chroma floor and a contrast ratio for each surface — measured, not eye
 | --- | --- | --- |
 | Ring (stroke) | `#00696D` — fails as a fill: chroma 0.08 | `#4FD8DE` — fails as a fill: too light |
 | Chart (bars) | `#0E9299` — passes | `#2BA8AE` — passes |
+| Chart (average line) | `#D95926` — passes | `#D95926` — passes |
+
+With two series on one chart, the colours also have to stay apart from **each
+other**, including for colour-blind readers. Teal and orange are a warm/cool pair:
+ΔE 15.6 (light) and 16.7 (dark) under simulated red-green colour blindness, against a
+target of 8. A brighter orange was tried first and dropped: it passed separation but
+sat at 2.7:1 against the light surface, and a 2dp line needs the contrast more than a
+filled bar does.
+
+Where the line crosses a bar it is drawn over a thin band of the surface colour, so
+the two never merge into one shape.
 
 ## The morning reminder
 

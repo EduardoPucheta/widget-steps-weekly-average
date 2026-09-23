@@ -81,6 +81,64 @@ class DashboardLoaderTest {
     }
 
     @Test
+    fun `reads thirteen days in one go, so the first point of the average has its history`() = runTest {
+        val repository = FakeStepsRepository()
+
+        load(repository)
+
+        assertEquals(1, repository.requestedWindows.size)
+        assertEquals(LocalDate.of(2026, 9, 9), repository.requestedWindows[0].start)
+        assertEquals(LocalDate.of(2026, 9, 21), repository.requestedWindows[0].end)
+    }
+
+    @Test
+    fun `the average line ends exactly on the headline`() = runTest {
+        val repository = FakeStepsRepository(
+            steps = (0L..12L).map { DailySteps(windowStart.minusDays(6).plusDays(it), 5_000L + it * 731) },
+        )
+
+        val state = load(repository) as DashboardState.Ready
+
+        assertEquals(state.summary.averageStepsPerDay, state.movingAverage.last().averageStepsPerDay)
+    }
+
+    @Test
+    fun `the average reflects the week before the window`() = runTest {
+        // A big week, then a quiet one: the line should start high and come down.
+        val repository = FakeStepsRepository(
+            steps = (1L..6L).map { DailySteps(windowStart.minusDays(it), 14_000) } +
+                (0L..6L).map { DailySteps(windowStart.plusDays(it), 7_000) },
+        )
+
+        val state = load(repository) as DashboardState.Ready
+
+        assertEquals(13_000L, state.movingAverage.first().averageStepsPerDay)
+        assertEquals(7_000L, state.movingAverage.last().averageStepsPerDay)
+    }
+
+    @Test
+    fun `the scale makes room for an average above every bar`() = runTest {
+        // After a big week the line can sit above all seven bars in view; a scale
+        // fitted to the bars alone would push it off the top of the chart.
+        val repository = FakeStepsRepository(
+            steps = (1L..6L).map { DailySteps(windowStart.minusDays(it), 20_000) } +
+                listOf(DailySteps(windowStart, 2_000)),
+        )
+
+        val state = load(repository) as DashboardState.Ready
+
+        assertEquals(2_000L, state.highestDay)
+        assertTrue(state.highestPlotted > state.highestDay)
+    }
+
+    @Test
+    fun `one average point per day, lined up with the bars`() = runTest {
+        val state = load(FakeStepsRepository(steps = emptyList())) as DashboardState.Ready
+
+        assertEquals(state.days.map { it.date }, state.movingAverage.map { it.date })
+    }
+
+    @Test
     fun `reports the tallest day so the chart can scale`() = runTest {
         val repository = FakeStepsRepository(
             steps = listOf(

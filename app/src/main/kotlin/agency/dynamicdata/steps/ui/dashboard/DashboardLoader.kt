@@ -3,6 +3,7 @@ package agency.dynamicdata.steps.ui.dashboard
 import agency.dynamicdata.steps.core.AverageBasis
 import agency.dynamicdata.steps.core.DailyBreakdown
 import agency.dynamicdata.steps.core.GoalProgress
+import agency.dynamicdata.steps.core.MovingAverage
 import agency.dynamicdata.steps.core.StepGoal
 import agency.dynamicdata.steps.core.StepsAverageCalculator
 import agency.dynamicdata.steps.core.StepsWindow
@@ -14,8 +15,10 @@ import java.time.LocalDate
 /**
  * Builds the in-app view of the same window the widget shows.
  *
- * The summary and the per-day breakdown come from one read, so the headline and the
- * chart can never be computed from different data and disagree on screen.
+ * The summary, the per-day breakdown and the moving average all come from one read,
+ * so the headline, the bars and the line can never be computed from different data
+ * and disagree on screen. That read reaches back further than the window: the first
+ * point of a 7-day average needs the six days before it.
  */
 class DashboardLoader(
     private val repository: StepsRepository,
@@ -38,7 +41,7 @@ class DashboardLoader(
         val window = StepsWindow.lastCompleteDays(today, days)
 
         return try {
-            val readings = repository.dailySteps(window)
+            val readings = repository.dailySteps(MovingAverage.readWindowFor(window, days))
             val summary = calculator.summarize(readings, window)
 
             // No early return for an empty window: the chart still has seven labelled
@@ -47,6 +50,7 @@ class DashboardLoader(
                 summary = summary,
                 progress = GoalProgress(goal, summary.averageStepsPerDay),
                 days = DailyBreakdown.of(readings, window),
+                movingAverage = MovingAverage.of(readings, window, calculator, days),
             )
         } catch (e: SecurityException) {
             Log.w(TAG, "step read denied", e)

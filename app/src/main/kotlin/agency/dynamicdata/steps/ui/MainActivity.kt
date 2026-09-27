@@ -5,6 +5,8 @@ import agency.dynamicdata.steps.reminder.ReminderSchedule
 import agency.dynamicdata.steps.ui.dashboard.DashboardLoader
 import agency.dynamicdata.steps.ui.dashboard.DashboardSection
 import agency.dynamicdata.steps.ui.dashboard.DashboardState
+import agency.dynamicdata.steps.ui.dashboard.SectionCard
+import agency.dynamicdata.steps.ui.theme.StepsTheme
 import agency.dynamicdata.steps.health.HealthConnectAvailability
 import agency.dynamicdata.steps.health.HealthConnectStepsRepository
 import agency.dynamicdata.steps.settings.SettingsStore
@@ -16,21 +18,28 @@ import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Surface
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -40,6 +49,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -101,10 +114,16 @@ class MainActivity : ComponentActivity() {
                 !granted.containsAll(HealthConnectStepsRepository.REQUIRED_PERMISSIONS)
         }
 
+        // Android 15 draws every app edge to edge regardless; opting in on older
+        // versions keeps the look the same everywhere, and the Scaffold below pads
+        // the content clear of the status and navigation bars.
+        enableEdgeToEdge()
+
         setContent {
-            MaterialTheme {
-                Surface(modifier = Modifier.fillMaxSize()) {
+            StepsTheme {
+                Scaffold(modifier = Modifier.fillMaxSize()) { insets ->
                     SetupScreen(
+                        contentPadding = insets,
                         dashboard = dashboard,
                         availability = repository.availability(),
                         denied = permissionDenied,
@@ -232,6 +251,7 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 private fun SetupScreen(
+    contentPadding: PaddingValues,
     dashboard: DashboardState,
     availability: HealthConnectAvailability,
     denied: Boolean,
@@ -246,71 +266,181 @@ private fun SetupScreen(
     onRequestPermissions: () -> Unit,
     onInstallHealthConnect: () -> Unit,
 ) {
-    val parsedGoal = goalInput.toLongOrNull()
-    val goalIsValid = parsedGoal != null && parsedGoal > 0
-    val goalIsUnsaved = goalIsValid && parsedGoal != savedGoal.stepsPerDay
-
     Column(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-        horizontalAlignment = Alignment.Start,
+            .padding(contentPadding)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text("7-day step average", style = MaterialTheme.typography.headlineSmall)
+        Text(
+            text = "Weekly steps",
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier
+                .padding(horizontal = 4.dp, vertical = 8.dp)
+                .semantics { heading() },
+        )
+
+        // Whatever is blocking the reading comes first: until it is sorted out the
+        // rest of the screen has nothing to show.
+        AccessCard(
+            availability = availability,
+            needsPermission = dashboard is DashboardState.PermissionRequired || denied,
+            denied = denied,
+            onRequestPermissions = onRequestPermissions,
+            onInstallHealthConnect = onInstallHealthConnect,
+        )
 
         DashboardSection(
             state = dashboard,
             locale = LocalConfiguration.current.locales[0] ?: Locale.getDefault(),
         )
 
-        HorizontalDivider()
+        SectionCard(title = "Settings") {
+            GoalSetting(goalInput, savedGoal, onGoalInputChange, onSaveGoal)
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            ReminderSetting(reminderOn, notificationsBlocked, reminderTime, onReminderChange)
+        }
 
         Text(
             "The window is the last seven complete days, ending yesterday — today is " +
                 "left out so the number doesn't sag every morning. Steps are read " +
                 "from Health Connect and nothing else, and never leave your phone.",
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
         )
+    }
+}
 
-        Text("Daily goal", style = MaterialTheme.typography.titleMedium)
-        OutlinedTextField(
-            value = goalInput,
-            onValueChange = onGoalInputChange,
-            modifier = Modifier.fillMaxWidth(),
-            label = { Text("Steps per day") },
-            singleLine = true,
-            isError = goalInput.isNotEmpty() && !goalIsValid,
-            supportingText = {
-                Text(
-                    when {
-                        goalInput.isEmpty() || !goalIsValid -> "Enter a number above zero."
-                        goalIsUnsaved -> "Not saved yet."
-                        else -> "Saved. The widget measures your average against this."
-                    },
-                )
-            },
-            keyboardOptions = KeyboardOptions(
-                keyboardType = KeyboardType.Number,
-                imeAction = ImeAction.Done,
-            ),
-        )
-        Button(onClick = onSaveGoal, enabled = goalIsUnsaved) { Text("Save goal") }
+/** Shown only while something stops the app reading steps; nothing otherwise. */
+@Composable
+private fun AccessCard(
+    availability: HealthConnectAvailability,
+    needsPermission: Boolean,
+    denied: Boolean,
+    onRequestPermissions: () -> Unit,
+    onInstallHealthConnect: () -> Unit,
+) {
+    val (message, action) = when (availability) {
+        HealthConnectAvailability.NOT_SUPPORTED ->
+            "Health Connect isn't supported on this device, so the widget has no " +
+                "step data to read." to null
 
-        Text("Morning reminder", style = MaterialTheme.typography.titleMedium)
+        HealthConnectAvailability.UPDATE_REQUIRED ->
+            "Health Connect needs to be installed or updated first." to
+                ("Get Health Connect" to onInstallHealthConnect)
+
+        HealthConnectAvailability.AVAILABLE -> {
+            if (!needsPermission) return
+            val text = if (denied) {
+                "Without step access the widget can't show an average. You can grant " +
+                    "it here, or any time from Health Connect settings."
+            } else {
+                "Allow step access and your last 7 days will appear here."
+            }
+            text to ("Allow step access" to onRequestPermissions)
+        }
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        ),
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(message, style = MaterialTheme.typography.bodyMedium)
+            action?.let { (label, onClick) -> Button(onClick = onClick) { Text(label) } }
+        }
+    }
+}
+
+@Composable
+private fun GoalSetting(
+    goalInput: String,
+    savedGoal: StepGoal,
+    onGoalInputChange: (String) -> Unit,
+    onSaveGoal: () -> Unit,
+) {
+    val parsedGoal = goalInput.toLongOrNull()
+    val goalIsValid = parsedGoal != null && parsedGoal > 0
+    val goalIsUnsaved = goalIsValid && parsedGoal != savedGoal.stepsPerDay
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Daily goal", style = MaterialTheme.typography.titleSmall)
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            OutlinedTextField(
+                value = goalInput,
+                onValueChange = onGoalInputChange,
+                modifier = Modifier.weight(1f),
+                label = { Text("Steps per day") },
+                singleLine = true,
+                isError = goalInput.isNotEmpty() && !goalIsValid,
+                supportingText = {
+                    Text(
+                        when {
+                            goalInput.isEmpty() || !goalIsValid -> "Enter a number above zero."
+                            goalIsUnsaved -> "Not saved yet."
+                            else -> "The widget measures your average against this."
+                        },
+                    )
+                },
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Number,
+                    imeAction = ImeAction.Done,
+                ),
+                keyboardActions = KeyboardActions(onDone = { if (goalIsUnsaved) onSaveGoal() }),
+            )
+            // Top-aligned with the field's outline rather than centred on the field
+            // plus its supporting text, which would leave the button floating.
+            Button(
+                onClick = onSaveGoal,
+                enabled = goalIsUnsaved,
+                modifier = Modifier.padding(top = 8.dp).heightIn(min = 48.dp),
+            ) { Text("Save") }
+        }
+    }
+}
+
+@Composable
+private fun ReminderSetting(
+    reminderOn: Boolean,
+    notificationsBlocked: Boolean,
+    reminderTime: String,
+    onReminderChange: (Boolean) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                // The whole row toggles, not just the switch: a 48dp thumb target
+                // on the far edge is easy to miss one-handed.
+                .toggleable(value = reminderOn, role = Role.Switch, onValueChange = onReminderChange),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                "Tell me at $reminderTime when my average is below my goal. " +
-                    "Nothing is sent on the days you are on track.",
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.weight(1f),
-            )
-            Switch(checked = reminderOn, onCheckedChange = onReminderChange)
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Morning reminder", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "A nudge at $reminderTime when your average is below your goal. " +
+                        "Nothing is sent on the days you are on track.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            // The row owns the click; the switch only shows the state.
+            Switch(checked = reminderOn, onCheckedChange = null)
         }
         if (notificationsBlocked) {
             Text(
@@ -318,34 +448,8 @@ private fun SetupScreen(
                     "no way to reach you. You can turn them back on in Android's " +
                     "app settings.",
                 style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
             )
-        }
-
-        when (availability) {
-            HealthConnectAvailability.NOT_SUPPORTED -> Text(
-                "Health Connect isn't supported on this device, so the widget has no " +
-                    "step data to read.",
-                style = MaterialTheme.typography.bodyMedium,
-            )
-
-            HealthConnectAvailability.UPDATE_REQUIRED -> {
-                Text(
-                    "Health Connect needs to be installed or updated first.",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                Button(onClick = onInstallHealthConnect) { Text("Get Health Connect") }
-            }
-
-            HealthConnectAvailability.AVAILABLE -> {
-                if (denied) {
-                    Text(
-                        "Without step access the widget can't show an average. " +
-                            "You can grant it any time from Health Connect settings.",
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                }
-                Button(onClick = onRequestPermissions) { Text("Allow step access") }
-            }
         }
     }
 }

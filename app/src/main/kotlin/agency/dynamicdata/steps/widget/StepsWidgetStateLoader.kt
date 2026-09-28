@@ -25,7 +25,16 @@ class StepsWidgetStateLoader(
 ) {
     private val calculator = StepsAverageCalculator(days, basis)
 
+    /**
+     * Why the last [load] could not read, or null if it could. The widget itself
+     * falls back quietly; the refresh tap reports this, so a failure says what
+     * happened instead of just leaving the old face up.
+     */
+    var lastFailure: Exception? = null
+        private set
+
     suspend fun load(today: LocalDate, goal: StepGoal): StepsWidgetState {
+        lastFailure = null
         when (repository.availability()) {
             HealthConnectAvailability.NOT_SUPPORTED ->
                 return StepsWidgetState.HealthConnectUnavailable(updatable = false)
@@ -47,9 +56,11 @@ class StepsWidgetStateLoader(
             // redrawn from the background. Show the last good reading instead of
             // telling the user to allow what they already allowed.
             Log.i(TAG, "step read refused, falling back to the last reading", e)
+            lastFailure = e
             return fallback(window, goal)
         } catch (e: Exception) {
             Log.e(TAG, "step read failed, falling back to the last reading", e)
+            lastFailure = e
             return fallback(window, goal)
         }
 

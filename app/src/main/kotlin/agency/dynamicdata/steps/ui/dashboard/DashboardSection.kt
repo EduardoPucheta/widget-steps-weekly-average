@@ -59,8 +59,10 @@ fun DashboardSection(
             // the button further down.
             is DashboardState.PermissionRequired -> Unit
 
-            is DashboardState.Error ->
-                MessageCard("Couldn't read your steps just now. Reopening the app will retry.")
+            is DashboardState.Error -> MessageCard(
+                "Couldn't read your steps just now. Reopening the app will retry.\n\n" +
+                    "Details: ${state.reason}",
+            )
 
             is DashboardState.Ready -> ReadyDashboard(state, locale)
         }

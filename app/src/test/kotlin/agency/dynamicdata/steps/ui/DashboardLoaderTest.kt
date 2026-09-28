@@ -191,19 +191,21 @@ class DashboardLoaderTest {
     }
 
     @Test
-    fun `falls back to asking for permission when it is revoked mid-read`() = runTest {
-        assertEquals(
-            DashboardState.PermissionRequired,
-            load(FakeStepsRepository(failWith = SecurityException("revoked"))),
-        )
+    fun `a refused read is an error with its reason, not a request for access`() = runTest {
+        // The permission check passed, so asking to "allow step access" would send
+        // the user to grant something they already have.
+        val state = load(FakeStepsRepository(failWith = SecurityException("not in foreground")))
+
+        assertTrue(state is DashboardState.Error)
+        assertTrue((state as DashboardState.Error).reason.contains("not in foreground"))
     }
 
     @Test
     fun `surfaces an error rather than an empty chart when the read fails`() = runTest {
-        assertEquals(
-            DashboardState.Error,
-            load(FakeStepsRepository(failWith = IllegalStateException("boom"))),
-        )
+        val state = load(FakeStepsRepository(failWith = IllegalStateException("boom")))
+
+        assertTrue(state is DashboardState.Error)
+        assertTrue((state as DashboardState.Error).reason.contains("boom"))
     }
 
     @Test

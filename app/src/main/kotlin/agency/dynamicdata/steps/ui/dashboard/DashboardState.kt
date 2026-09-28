@@ -50,5 +50,6 @@ sealed interface DashboardState {
         val trackedDays: Int get() = days.count { it.isTracked }
     }
 
-    data object Error : DashboardState
+    /** A read failed; [reason] is shown so a failure can be reported, not guessed at. */
+    data class Error(val reason: String) : DashboardState
 }

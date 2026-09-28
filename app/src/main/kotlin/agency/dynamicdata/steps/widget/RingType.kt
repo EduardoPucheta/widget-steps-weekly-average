@@ -17,6 +17,7 @@ data class RingType(
     val label: TextUnit,
     val number: TextUnit,
     val goal: TextUnit,
+    val labelGap: Dp,
     val sidePadding: Dp,
 ) {
     companion object {
@@ -43,6 +44,15 @@ data class RingType(
         private const val LABEL_RATIO = 0.095f
         private const val GOAL_RATIO = 0.115f
 
+        /**
+         * Space between the label and the headline. Just enough that the label
+         * reads as a caption rather than part of the number — more pushes the
+         * label toward the narrow top of the circle.
+         */
+        private const val LABEL_GAP_RATIO = 0.025f
+        private const val MIN_LABEL_GAP_DP = 2f
+        private const val MAX_LABEL_GAP_DP = 6f
+
         /** Bounds, so a tiny or an enormous widget still lands somewhere sane. */
         private const val MIN_NUMBER_SP = 18f
         private const val MAX_NUMBER_SP = 52f
@@ -53,6 +63,7 @@ data class RingType(
             label = (sideDp * LABEL_RATIO).coerceIn(MIN_SMALL_SP, MAX_SMALL_SP).sp,
             number = (sideDp * NUMBER_RATIO).coerceIn(MIN_NUMBER_SP, MAX_NUMBER_SP).sp,
             goal = (sideDp * GOAL_RATIO).coerceIn(MIN_SMALL_SP, MAX_SMALL_SP).sp,
+            labelGap = (sideDp * LABEL_GAP_RATIO).coerceIn(MIN_LABEL_GAP_DP, MAX_LABEL_GAP_DP).dp,
             // Pads in to the ring's inner circle, so text cannot sit under the stroke.
             sidePadding = (sideDp * (1f - INNER_RATIO) / 2f).dp,
         )

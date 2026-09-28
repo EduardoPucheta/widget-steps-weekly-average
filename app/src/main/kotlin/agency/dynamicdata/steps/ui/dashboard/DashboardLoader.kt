@@ -53,11 +53,14 @@ class DashboardLoader(
                 movingAverage = MovingAverage.of(readings, window, calculator, days),
             )
         } catch (e: SecurityException) {
-            Log.w(TAG, "step read denied", e)
-            DashboardState.PermissionRequired
+            // Access was confirmed just above, so this is Health Connect refusing the
+            // read, not a missing permission. Saying "allow step access" here sent
+            // people to grant something they already had.
+            Log.w(TAG, "step read refused", e)
+            DashboardState.Error("Health Connect refused the read: ${e.message ?: "no reason given"}")
         } catch (e: Exception) {
             Log.e(TAG, "step read failed", e)
-            DashboardState.Error
+            DashboardState.Error("${e.javaClass.simpleName}: ${e.message ?: "no details"}")
         }
     }
 

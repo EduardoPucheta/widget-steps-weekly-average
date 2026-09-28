@@ -18,18 +18,32 @@ sealed interface StepsWidgetState {
     /** Health Connect is missing or too old — tapping opens the Play Store listing. */
     data class HealthConnectUnavailable(val updatable: Boolean) : StepsWidgetState
 
-    /** Installed, but the user has not granted step access yet — tapping opens the app. */
+    /**
+     * Health Connect says step access is not granted — tapping opens the app.
+     *
+     * Only ever from the permission check itself. A read that is refused while
+     * access *is* granted is Health Connect's background rule, not a missing
+     * permission, and asking the user to "allow" something they already allowed was
+     * exactly the bug this replaced.
+     */
     data object PermissionRequired : StepsWidgetState
 
     /** Permission is granted but nothing was reported in the window. */
     data class NoData(val summary: StepsSummary) : StepsWidgetState
 
-    /** The normal case. */
+    /**
+     * The normal case.
+     *
+     * [current] is false when the reading had to come from the last saved one and
+     * that one covers an earlier window — the number is real, but no longer this
+     * week's, so the widget says so and offers a refresh.
+     */
     data class Ready(
         val summary: StepsSummary,
         val progress: GoalProgress,
+        val current: Boolean = true,
     ) : StepsWidgetState
 
-    /** A read failed. */
+    /** Nothing could be read and there is no earlier reading to fall back to. */
     data object Error : StepsWidgetState
 }

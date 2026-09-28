@@ -81,6 +81,7 @@ class MainActivity : ComponentActivity() {
     private var permissionDenied by mutableStateOf(false)
     private var reminderOn by mutableStateOf(false)
     private var notificationsBlocked by mutableStateOf(false)
+    private var backgroundMissing by mutableStateOf(false)
     private var dashboard by mutableStateOf<DashboardState>(DashboardState.Loading)
     private var goalInput by mutableStateOf("")
     private var savedGoal by mutableStateOf(StepGoal.DEFAULT)
@@ -150,11 +151,10 @@ class MainActivity : ComponentActivity() {
                                 else -> setReminder(true)
                             }
                         },
+                        backgroundMissing = backgroundMissing,
                         onRequestPermissions = {
                             permissionDenied = false
-                            requestPermissions.launch(
-                                HealthConnectStepsRepository.REQUIRED_PERMISSIONS,
-                            )
+                            requestPermissions.launch(repository.permissionsToRequest())
                         },
                         onInstallHealthConnect = ::openHealthConnectListing,
                     )
@@ -178,6 +178,11 @@ class MainActivity : ComponentActivity() {
                 today = repository.today(),
                 goal = goalStore.currentGoal(),
             )
+            // Asked for separately from step access, so people who granted steps
+            // before background reads existed are offered it once rather than never.
+            backgroundMissing = dashboard is DashboardState.Ready &&
+                repository.backgroundReadSupported() &&
+                !repository.hasBackgroundReadPermission()
         }
     }
 
@@ -255,6 +260,7 @@ private fun SetupScreen(
     dashboard: DashboardState,
     availability: HealthConnectAvailability,
     denied: Boolean,
+    backgroundMissing: Boolean,
     goalInput: String,
     savedGoal: StepGoal,
     reminderOn: Boolean,
@@ -289,6 +295,7 @@ private fun SetupScreen(
             availability = availability,
             needsPermission = dashboard is DashboardState.PermissionRequired || denied,
             denied = denied,
+            backgroundMissing = backgroundMissing,
             onRequestPermissions = onRequestPermissions,
             onInstallHealthConnect = onInstallHealthConnect,
         )
@@ -321,6 +328,7 @@ private fun AccessCard(
     availability: HealthConnectAvailability,
     needsPermission: Boolean,
     denied: Boolean,
+    backgroundMissing: Boolean,
     onRequestPermissions: () -> Unit,
     onInstallHealthConnect: () -> Unit,
 ) {
@@ -334,14 +342,19 @@ private fun AccessCard(
                 ("Get Health Connect" to onInstallHealthConnect)
 
         HealthConnectAvailability.AVAILABLE -> {
-            if (!needsPermission) return
-            val text = if (denied) {
+            if (!needsPermission && !backgroundMissing) return
+            val text = if (!needsPermission) {
+                "Let the widget update on its own. Health Connect only shares steps " +
+                    "while this app is open unless you allow background access — " +
+                    "without it the widget can only catch up when you tap it."
+            } else if (denied) {
                 "Without step access the widget can't show an average. You can grant " +
                     "it here, or any time from Health Connect settings."
             } else {
                 "Allow step access and your last 7 days will appear here."
             }
-            text to ("Allow step access" to onRequestPermissions)
+            val label = if (needsPermission) "Allow step access" else "Allow background updates"
+            text to (label to onRequestPermissions)
         }
     }
 

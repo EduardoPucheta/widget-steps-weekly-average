@@ -2,9 +2,11 @@ package agency.dynamicdata.steps.widget
 
 import agency.dynamicdata.steps.core.DailySteps
 import agency.dynamicdata.steps.core.StepGoal
+import agency.dynamicdata.steps.core.StepsSummary
 import agency.dynamicdata.steps.health.HealthConnectAvailability
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDate
@@ -127,10 +129,15 @@ class StepsWidgetStateLoaderTest {
     }
 
     @Test
-    fun `falls back to asking for permission when it is revoked mid-read`() = runTest {
-        val repository = FakeStepsRepository(failWith = SecurityException("revoked"))
+    fun `a refused read is not reported as missing permission`() = runTest {
+        // Access is granted — the check passed — but Health Connect refuses the read
+        // because the widget is being drawn from the background. That used to show
+        // "Tap to allow step access", asking for a permission the user already gave.
+        val repository = FakeStepsRepository(failWith = SecurityException("background read"))
 
-        assertEquals(StepsWidgetState.PermissionRequired, loader(repository).load(today, goal))
+        val state = loader(repository).load(today, goal)
+
+        assertEquals(StepsWidgetState.Error, state)
     }
 
     @Test
@@ -139,4 +146,100 @@ class StepsWidgetStateLoaderTest {
 
         assertEquals(StepsWidgetState.Error, loader(repository).load(today, goal))
     }
+
+    @Test
+    fun `remembers every reading that succeeds`() = runTest {
+        val cache = FakeReadingCache()
+        val repository = FakeStepsRepository(steps = sevenDaysFrom(windowStart, perDay = 8400))
+
+        StepsWidgetStateLoader(repository, cache).load(today, goal)
+
+        assertEquals(8400L, cache.saved?.averageStepsPerDay)
+    }
+
+    @Test
+    fun `a refused read shows this week's saved reading as current`() = runTest {
+        val cache = FakeReadingCache()
+        StepsWidgetStateLoader(
+            FakeStepsRepository(steps = sevenDaysFrom(windowStart, perDay = 8400)),
+            cache,
+        ).load(today, goal)
+
+        val state = StepsWidgetStateLoader(
+            FakeStepsRepository(failWith = SecurityException("background read")),
+            cache,
+        ).load(today, goal)
+
+        val ready = state as StepsWidgetState.Ready
+        assertEquals(8400L, ready.summary.averageStepsPerDay)
+        assertTrue("the days in the window are over, so the number is still right", ready.current)
+    }
+
+    @Test
+    fun `a saved reading from an earlier week is shown but flagged`() = runTest {
+        val cache = FakeReadingCache()
+        // Read on the 21st, so its window is 14–20 Sep, one day behind today's.
+        StepsWidgetStateLoader(
+            FakeStepsRepository(steps = sevenDaysFrom(windowStart.minusDays(1), perDay = 7000)),
+            cache,
+        ).load(today.minusDays(1), goal)
+
+        val state = StepsWidgetStateLoader(
+            FakeStepsRepository(failWith = SecurityException("background read")),
+            cache,
+        ).load(today, goal)
+
+        val ready = state as StepsWidgetState.Ready
+        assertEquals(7000L, ready.summary.averageStepsPerDay)
+        assertFalse(ready.current)
+    }
+
+    @Test
+    fun `a saved reading is measured against today's goal`() = runTest {
+        val cache = FakeReadingCache()
+        StepsWidgetStateLoader(
+            FakeStepsRepository(steps = sevenDaysFrom(windowStart, perDay = 8400)),
+            cache,
+        ).load(today, StepGoal(10_000))
+
+        val state = StepsWidgetStateLoader(
+            FakeStepsRepository(failWith = IllegalStateException("provider died")),
+            cache,
+        ).load(today, StepGoal(8_000))
+
+        assertTrue((state as StepsWidgetState.Ready).progress.isMet)
+    }
+
+    @Test
+    fun `a reading that fails to save is still shown`() = runTest {
+        val repository = FakeStepsRepository(steps = sevenDaysFrom(windowStart, perDay = 8400))
+
+        val state = StepsWidgetStateLoader(repository, FakeReadingCache(failSave = true)).load(today, goal)
+
+        assertTrue((state as StepsWidgetState.Ready).current)
+    }
+
+    @Test
+    fun `missing access is still reported, and never covered up by a saved reading`() = runTest {
+        val cache = FakeReadingCache()
+        StepsWidgetStateLoader(
+            FakeStepsRepository(steps = sevenDaysFrom(windowStart, perDay = 8400)),
+            cache,
+        ).load(today, goal)
+
+        val state = StepsWidgetStateLoader(FakeStepsRepository(permitted = false), cache).load(today, goal)
+
+        assertEquals(StepsWidgetState.PermissionRequired, state)
+    }
+}
+
+private class FakeReadingCache(private val failSave: Boolean = false) : ReadingCache {
+    var saved: StepsSummary? = null
+
+    override suspend fun save(summary: StepsSummary) {
+        if (failSave) throw java.io.IOException("disk full")
+        saved = summary
+    }
+
+    override suspend fun last(): StepsSummary? = saved
 }

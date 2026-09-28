@@ -49,9 +49,9 @@ data class RingType(
          * reads as a caption rather than part of the number — more pushes the
          * label toward the narrow top of the circle.
          */
-        private const val LABEL_GAP_RATIO = 0.025f
-        private const val MIN_LABEL_GAP_DP = 2f
-        private const val MAX_LABEL_GAP_DP = 6f
+        private const val LABEL_GAP_RATIO = 0.05f
+        private const val MIN_LABEL_GAP_DP = 4f
+        private const val MAX_LABEL_GAP_DP = 10f
 
         /** Bounds, so a tiny or an enormous widget still lands somewhere sane. */
         private const val MIN_NUMBER_SP = 18f

@@ -6,6 +6,11 @@
       through Health Connect's own UI, not the runtime permission dialog.
     -->
     <uses-permission android:name="android.permission.health.READ_STEPS" />
+    <!--
+      Health Connect answers reads only while the app is on screen unless this is
+      granted. The widget and the morning reminder both read from the background.
+    -->
+    <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND" />
 
     <!-- Required from Android 13 to show the morning reminder at all. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -55,6 +60,18 @@
                 <category android:name="android.intent.category.HEALTH_PERMISSIONS" />
             </intent-filter>
         </activity-alias>
+
+        <!--
+          The widget's refresh tap. Transparent and gone as soon as the read is done;
+          its own empty task affinity keeps it from bringing the app's task forward.
+        -->
+        <activity
+            android:name=".widget.RefreshActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.StepsWidget.Refresh" />
 
         <activity
             android:name=".ui.PermissionsRationaleActivity"

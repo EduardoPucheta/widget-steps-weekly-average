@@ -1,6 +1,7 @@
 package agency.dynamicdata.steps.widget
 
 import agency.dynamicdata.steps.health.HealthConnectStepsRepository
+import agency.dynamicdata.steps.settings.LastReadingStore
 import agency.dynamicdata.steps.settings.SettingsStore
 import agency.dynamicdata.steps.ui.MainActivity
 import android.content.Context
@@ -49,7 +50,7 @@ class StepsWidget : GlanceAppWidget() {
         val locale = context.resources.configuration.locales[0] ?: Locale.getDefault()
         val goal = SettingsStore(context).currentGoal()
 
-        val state = StepsWidgetStateLoader(repository).load(
+        val state = StepsWidgetStateLoader(repository, LastReadingStore(context)).load(
             today = repository.today(),
             goal = goal,
         )
@@ -82,7 +83,16 @@ private fun StepsRing(
     Box(
         modifier = GlanceModifier
             .fillMaxSize()
-            .clickable(actionStartActivity<MainActivity>()),
+            .clickable(
+                // Where a tap helps: a refresh when the number is out of date or
+                // could not be read, the app otherwise — including when access is
+                // genuinely missing, which only the app can ask for.
+                if (state.wantsRefresh()) {
+                    actionStartActivity<RefreshActivity>()
+                } else {
+                    actionStartActivity<MainActivity>()
+                },
+            ),
         contentAlignment = Alignment.Center,
     ) {
         Image(
@@ -139,7 +149,9 @@ private fun ReadyFace(
         },
     ) {
         Text(
-            text = "${summary.dayCount}-day avg",
+            // An older week's number stays up — a real reading beats a blank — but it
+            // says it is not this week's and that a tap brings it up to date.
+            text = if (state.current) "${summary.dayCount}-day avg" else "↻ tap to update",
             style = TextStyle(
                 fontSize = type.label,
                 textAlign = TextAlign.Center,
@@ -185,7 +197,7 @@ private fun StatusFace(state: StepsWidgetState, night: Boolean, type: RingType) 
             if (state.updatable) "Update\nHealth Connect" else "Not\nsupported"
         is StepsWidgetState.PermissionRequired -> "Tap to allow\nstep access"
         is StepsWidgetState.NoData -> "No steps\nin 7 days"
-        is StepsWidgetState.Error -> "Tap to\nretry"
+        is StepsWidgetState.Error -> "↻\nTap to refresh"
         is StepsWidgetState.Ready -> return
     }
 
@@ -199,4 +211,11 @@ private fun StatusFace(state: StepsWidgetState, night: Boolean, type: RingType) 
             ),
         )
     }
+}
+
+/** True for the states a refresh can fix; everything else opens the app. */
+private fun StepsWidgetState.wantsRefresh(): Boolean = when (this) {
+    is StepsWidgetState.Ready -> !current
+    is StepsWidgetState.Error -> true
+    else -> false
 }

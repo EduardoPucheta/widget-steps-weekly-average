@@ -1,0 +1,217 @@
+package agency.dynamicdata.steps.ui
+
+import agency.dynamicdata.steps.core.DailySteps
+import agency.dynamicdata.steps.core.StepGoal
+import agency.dynamicdata.steps.health.HealthConnectAvailability
+import agency.dynamicdata.steps.ui.dashboard.DashboardLoader
+import agency.dynamicdata.steps.ui.dashboard.DashboardState
+import agency.dynamicdata.steps.widget.FakeStepsRepository
+import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import java.time.LocalDate
+
+class DashboardLoaderTest {
+
+    private val today = LocalDate.of(2026, 9, 22)
+    private val windowStart = LocalDate.of(2026, 9, 15)
+    private val goal = StepGoal(10_000)
+
+    private suspend fun load(repository: FakeStepsRepository) =
+        DashboardLoader(repository).load(today, goal)
+
+    @Test
+    fun `gives one entry per day even when nothing was recorded`() = runTest {
+        val state = load(FakeStepsRepository(steps = emptyList())) as DashboardState.Ready
+
+        assertEquals(7, state.days.size)
+        assertEquals(0, state.trackedDays)
+        assertTrue(state.days.all { it.steps == null })
+    }
+
+    @Test
+    fun `an empty week is flagged as having no data, not an average of zero`() = runTest {
+        // The headline branches on this. Without it, a week with nothing recorded
+        // renders as "0" and "10,000 short of 10k".
+        val state = load(FakeStepsRepository(steps = emptyList())) as DashboardState.Ready
+
+        assertTrue(state.summary.hasNoData)
+    }
+
+    @Test
+    fun `a week with any reading is not flagged as empty`() = runTest {
+        val repository = FakeStepsRepository(steps = listOf(DailySteps(windowStart, 3_000)))
+
+        val state = load(repository) as DashboardState.Ready
+
+        assertEquals(false, state.summary.hasNoData)
+    }
+
+    @Test
+    fun `keeps gaps as gaps rather than zeros`() = runTest {
+        val repository = FakeStepsRepository(
+            steps = listOf(
+                DailySteps(windowStart, 9_000),
+                DailySteps(windowStart.plusDays(2), 5_000),
+            ),
+        )
+
+        val state = load(repository) as DashboardState.Ready
+
+        assertEquals(9_000L, state.days[0].steps)
+        assertNull(state.days[1].steps)
+        assertEquals(5_000L, state.days[2].steps)
+        assertEquals(2, state.trackedDays)
+    }
+
+    @Test
+    fun `the headline and the chart come from the same read`() = runTest {
+        // One round trip. Two would let the number and the bars drift apart.
+        val repository = FakeStepsRepository(
+            steps = (0L..6L).map { DailySteps(windowStart.plusDays(it), 7_000) },
+        )
+
+        val state = load(repository) as DashboardState.Ready
+
+        assertEquals(1, repository.requestedWindows.size)
+        assertEquals(7_000L, state.summary.averageStepsPerDay)
+        assertEquals(49_000L, state.days.sumOf { it.steps ?: 0L })
+    }
+
+    @Test
+    fun `reads thirteen days in one go, so the first point of the average has its history`() = runTest {
+        val repository = FakeStepsRepository()
+
+        load(repository)
+
+        assertEquals(1, repository.requestedWindows.size)
+        assertEquals(LocalDate.of(2026, 9, 9), repository.requestedWindows[0].start)
+        assertEquals(LocalDate.of(2026, 9, 21), repository.requestedWindows[0].end)
+    }
+
+    @Test
+    fun `the average line ends exactly on the headline`() = runTest {
+        val repository = FakeStepsRepository(
+            steps = (0L..12L).map { DailySteps(windowStart.minusDays(6).plusDays(it), 5_000L + it * 731) },
+        )
+
+        val state = load(repository) as DashboardState.Ready
+
+        assertEquals(state.summary.averageStepsPerDay, state.movingAverage.last().averageStepsPerDay)
+    }
+
+    @Test
+    fun `the average reflects the week before the window`() = runTest {
+        // A big week, then a quiet one: the line should start high and come down.
+        val repository = FakeStepsRepository(
+            steps = (1L..6L).map { DailySteps(windowStart.minusDays(it), 14_000) } +
+                (0L..6L).map { DailySteps(windowStart.plusDays(it), 7_000) },
+        )
+
+        val state = load(repository) as DashboardState.Ready
+
+        assertEquals(13_000L, state.movingAverage.first().averageStepsPerDay)
+        assertEquals(7_000L, state.movingAverage.last().averageStepsPerDay)
+    }
+
+    @Test
+    fun `the scale makes room for an average above every bar`() = runTest {
+        // After a big week the line can sit above all seven bars in view; a scale
+        // fitted to the bars alone would push it off the top of the chart.
+        val repository = FakeStepsRepository(
+            steps = (1L..6L).map { DailySteps(windowStart.minusDays(it), 20_000) } +
+                listOf(DailySteps(windowStart, 2_000)),
+        )
+
+        val state = load(repository) as DashboardState.Ready
+
+        assertEquals(2_000L, state.highestDay)
+        assertTrue(state.highestPlotted > state.highestDay)
+    }
+
+    @Test
+    fun `one average point per day, lined up with the bars`() = runTest {
+        val state = load(FakeStepsRepository(steps = emptyList())) as DashboardState.Ready
+
+        assertEquals(state.days.map { it.date }, state.movingAverage.map { it.date })
+    }
+
+    @Test
+    fun `reports the tallest day so the chart can scale`() = runTest {
+        val repository = FakeStepsRepository(
+            steps = listOf(
+                DailySteps(windowStart, 4_000),
+                DailySteps(windowStart.plusDays(1), 16_500),
+            ),
+        )
+
+        val state = load(repository) as DashboardState.Ready
+
+        assertEquals(16_500L, state.highestDay)
+    }
+
+    @Test
+    fun `the tallest day is zero when nothing is known, not an error`() = runTest {
+        val state = load(FakeStepsRepository(steps = emptyList())) as DashboardState.Ready
+
+        assertEquals(0L, state.highestDay)
+    }
+
+    @Test
+    fun `measures the average against the goal`() = runTest {
+        val repository = FakeStepsRepository(
+            steps = (0L..6L).map { DailySteps(windowStart.plusDays(it), 8_400) },
+        )
+
+        val state = load(repository) as DashboardState.Ready
+
+        assertEquals(1_600L, state.progress.stepsShort)
+    }
+
+    @Test
+    fun `asks for permission before reading`() = runTest {
+        val repository = FakeStepsRepository(permitted = false)
+
+        assertEquals(DashboardState.PermissionRequired, load(repository))
+        assertTrue(repository.requestedWindows.isEmpty())
+    }
+
+    @Test
+    fun `distinguishes an outdated health connect from an unsupported device`() = runTest {
+        assertEquals(
+            DashboardState.HealthConnectUnavailable(updatable = true),
+            load(FakeStepsRepository(availability = HealthConnectAvailability.UPDATE_REQUIRED)),
+        )
+        assertEquals(
+            DashboardState.HealthConnectUnavailable(updatable = false),
+            load(FakeStepsRepository(availability = HealthConnectAvailability.NOT_SUPPORTED)),
+        )
+    }
+
+    @Test
+    fun `falls back to asking for permission when it is revoked mid-read`() = runTest {
+        assertEquals(
+            DashboardState.PermissionRequired,
+            load(FakeStepsRepository(failWith = SecurityException("revoked"))),
+        )
+    }
+
+    @Test
+    fun `surfaces an error rather than an empty chart when the read fails`() = runTest {
+        assertEquals(
+            DashboardState.Error,
+            load(FakeStepsRepository(failWith = IllegalStateException("boom"))),
+        )
+    }
+
+    @Test
+    fun `never asks for today`() = runTest {
+        val repository = FakeStepsRepository()
+
+        load(repository)
+
+        assertTrue(repository.requestedWindows.none { today in it })
+    }
+}

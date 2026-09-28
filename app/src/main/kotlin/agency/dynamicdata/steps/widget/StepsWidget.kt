@@ -157,6 +157,7 @@ private fun ReadyFace(
                 textAlign = TextAlign.Center,
                 color = StepsRingPalette.onSurfaceVariant.toColorProvider(night),
             ),
+            modifier = GlanceModifier.padding(bottom = type.labelGap),
         )
         Text(
             text = StepsWidgetFormat.compact(summary.averageStepsPerDay, locale),

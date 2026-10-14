@@ -13,12 +13,13 @@ import android.util.Log
 import java.time.LocalDate
 
 /**
- * Builds the in-app view of the same window the widget shows.
+ * Builds the in-app view of the same window the widget shows, plus today so far.
  *
- * The summary, the per-day breakdown and the moving average all come from one read,
- * so the headline, the bars and the line can never be computed from different data
- * and disagree on screen. That read reaches back further than the window: the first
- * point of a 7-day average needs the six days before it.
+ * The summary, the per-day breakdown, the moving average and today all come from one
+ * read, so the numbers on screen can never be computed from different data and
+ * disagree. That read reaches back further than the window — the first point of a
+ * 7-day average needs the six days before it — and forward to today, which is shown
+ * on its own and never enters the average.
  */
 class DashboardLoader(
     private val repository: StepsRepository,
@@ -41,7 +42,8 @@ class DashboardLoader(
         val window = StepsWindow.lastCompleteDays(today, days)
 
         return try {
-            val readings = repository.dailySteps(MovingAverage.readWindowFor(window, days))
+            val history = MovingAverage.readWindowFor(window, days)
+            val readings = repository.dailySteps(StepsWindow(history.start, today))
             val summary = calculator.summarize(readings, window)
 
             // No early return for an empty window: the chart still has seven labelled
@@ -51,6 +53,11 @@ class DashboardLoader(
                 progress = GoalProgress(goal, summary.averageStepsPerDay),
                 days = DailyBreakdown.of(readings, window),
                 movingAverage = MovingAverage.of(readings, window, calculator, days),
+                // Everything above filters to the window, which ends yesterday, so
+                // today's partial count cannot leak into the average.
+                today = readings.filter { it.date == today }
+                    .takeIf { it.isNotEmpty() }
+                    ?.sumOf { it.steps },
             )
         } catch (e: SecurityException) {
             // Access was confirmed just above, so this is Health Connect refusing the

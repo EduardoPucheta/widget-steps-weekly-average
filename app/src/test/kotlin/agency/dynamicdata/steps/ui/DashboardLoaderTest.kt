@@ -81,14 +81,14 @@ class DashboardLoaderTest {
     }
 
     @Test
-    fun `reads thirteen days in one go, so the first point of the average has its history`() = runTest {
+    fun `reads the average's history and today in one go`() = runTest {
         val repository = FakeStepsRepository()
 
         load(repository)
 
         assertEquals(1, repository.requestedWindows.size)
         assertEquals(LocalDate.of(2026, 9, 9), repository.requestedWindows[0].start)
-        assertEquals(LocalDate.of(2026, 9, 21), repository.requestedWindows[0].end)
+        assertEquals(today, repository.requestedWindows[0].end)
     }
 
     @Test
@@ -209,11 +209,33 @@ class DashboardLoaderTest {
     }
 
     @Test
-    fun `never asks for today`() = runTest {
-        val repository = FakeStepsRepository()
+    fun `today is shown but never counted in the average`() = runTest {
+        val repository = FakeStepsRepository(
+            steps = (0L..6L).map { DailySteps(windowStart.plusDays(it), 7_000) } +
+                DailySteps(today, 1_200),
+        )
 
-        load(repository)
+        val state = load(repository) as DashboardState.Ready
 
-        assertTrue(repository.requestedWindows.none { today in it })
+        assertEquals(1_200L, state.today)
+        assertEquals(7_000L, state.summary.averageStepsPerDay)
+        assertTrue(state.days.none { it.date == today })
+        assertTrue(state.movingAverage.none { it.date == today })
+    }
+
+    @Test
+    fun `a today with nothing recorded is unknown, not zero`() = runTest {
+        val state = load(FakeStepsRepository()) as DashboardState.Ready
+
+        assertNull(state.today)
+    }
+
+    @Test
+    fun `today is measured against the same goal as the average`() = runTest {
+        val repository = FakeStepsRepository(steps = listOf(DailySteps(today, 2_500)))
+
+        val state = load(repository) as DashboardState.Ready
+
+        assertEquals(25, state.todayProgress.percentOfGoal)
     }
 }

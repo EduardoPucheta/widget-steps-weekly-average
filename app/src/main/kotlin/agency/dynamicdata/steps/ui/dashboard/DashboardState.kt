@@ -17,13 +17,20 @@ sealed interface DashboardState {
     /**
      * A reading. [days] and [movingAverage] both have one entry per day of the
      * window, in the same order, including the days with nothing recorded.
+     *
+     * [today] is the day in progress, which the window deliberately leaves out: steps
+     * so far, or null when nothing has been recorded yet. [todayProgress] measures it
+     * against the same goal as the average.
      */
     data class Ready(
         val summary: StepsSummary,
         val progress: GoalProgress,
         val days: List<DayEntry>,
         val movingAverage: List<MovingAveragePoint>,
+        val today: Long? = null,
     ) : DashboardState {
+
+        val todayProgress: GoalProgress get() = GoalProgress(progress.goal, today ?: 0L)
 
         init {
             require(movingAverage.map { it.date } == days.map { it.date }) {

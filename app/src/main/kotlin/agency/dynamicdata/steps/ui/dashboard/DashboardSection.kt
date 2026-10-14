@@ -3,9 +3,9 @@ package agency.dynamicdata.steps.ui.dashboard
 import agency.dynamicdata.steps.core.DayEntry
 import agency.dynamicdata.steps.core.GoalProgress
 import agency.dynamicdata.steps.core.MovingAveragePoint
-import agency.dynamicdata.steps.core.StepsSummary
 import agency.dynamicdata.steps.widget.StepsWidgetFormat
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.shape.CircleShape
@@ -27,6 +27,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -71,7 +72,7 @@ fun DashboardSection(
 
 @Composable
 private fun ReadyDashboard(state: DashboardState.Ready, locale: Locale) {
-    HeroCard(state.summary, state.progress, locale)
+    HeroCard(state, locale)
 
     SectionCard(title = "Last 7 days") {
         DailyStepsChart(
@@ -100,10 +101,13 @@ private fun ReadyDashboard(state: DashboardState.Ready, locale: Locale) {
 
 /**
  * The widget's reading, larger: the ring, the average inside it, and the gap to the
- * goal in a pill underneath — the one thing to act on.
+ * goal in a pill underneath — the one thing to act on. Today so far sits in a
+ * smaller ring beside it.
  */
 @Composable
-private fun HeroCard(summary: StepsSummary, progress: GoalProgress, locale: Locale) {
+private fun HeroCard(state: DashboardState.Ready, locale: Locale) {
+    val summary = state.summary
+    val progress = state.progress
     val range = StepsWidgetFormat.windowRange(summary, locale)
 
     Card(
@@ -139,36 +143,56 @@ private fun HeroCard(summary: StepsSummary, progress: GoalProgress, locale: Loca
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
                 )
+                // A first day with the app can have steps today and no history yet.
+                if (state.today != null) TodayRing(state.today, state.todayProgress, TODAY_MAX, locale)
                 return@Column
             }
 
             val average = StepsWidgetFormat.exact(summary.averageStepsPerDay, locale)
             val goal = StepsWidgetFormat.compact(progress.goal.stepsPerDay, locale)
 
-            GoalRing(
-                progress = progress,
-                modifier = Modifier.semantics(mergeDescendants = true) {
-                    contentDescription =
-                        "$average steps per day on average, $range, " +
-                            StepsWidgetFormat.goalSpoken(progress, locale)
-                },
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = "${summary.dayCount}-day average",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Text(
-                        text = average,
-                        style = MaterialTheme.typography.displaySmall,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    Text(
-                        text = "${progress.percentOfGoal}% of $goal",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+            BoxWithConstraints(Modifier.fillMaxWidth()) {
+                // Sized from the card's width rather than fixed, so the pair still fits
+                // side by side on a narrow phone instead of the small ring being
+                // squeezed off the edge.
+                val shared = maxWidth - RING_GAP
+                val mainDiameter = minOf(MAIN_MAX, shared * MAIN_SHARE)
+                val todayDiameter = minOf(TODAY_MAX, shared * (1f - MAIN_SHARE))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(RING_GAP, Alignment.CenterHorizontally),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    GoalRing(
+                        progress = progress,
+                        diameter = mainDiameter,
+                        modifier = Modifier.semantics(mergeDescendants = true) {
+                            contentDescription =
+                                "$average steps per day on average, $range, " +
+                                    StepsWidgetFormat.goalSpoken(progress, locale)
+                        },
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = "${summary.dayCount}-day average",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Text(
+                                text = average,
+                                style = MaterialTheme.typography.displaySmall,
+                                fontWeight = FontWeight.Bold,
+                            )
+                            Text(
+                                text = "${progress.percentOfGoal}% of $goal",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+
+                    TodayRing(state.today, state.todayProgress, todayDiameter, locale)
                 }
             }
 
@@ -182,6 +206,63 @@ private fun HeroCard(summary: StepsSummary, progress: GoalProgress, locale: Loca
         }
     }
 }
+
+/**
+ * Today so far, against the same goal as the average.
+ *
+ * Kept out of the big ring on purpose: a day in progress is always behind in the
+ * morning, and mixing it into the average is what the 7-day window exists to avoid.
+ * Beside it, it answers a different question — how today is going — without moving
+ * the headline. Nothing recorded yet shows a dash and an empty track, not a zero.
+ */
+@Composable
+private fun TodayRing(
+    steps: Long?,
+    progress: GoalProgress,
+    diameter: Dp,
+    locale: Locale,
+) {
+    GoalRing(
+        progress = progress,
+        diameter = diameter,
+        strokeWidth = TODAY_STROKE,
+        modifier = Modifier.semantics(mergeDescendants = true) {
+            contentDescription = if (steps == null) {
+                "Today: nothing recorded yet"
+            } else {
+                "Today: ${StepsWidgetFormat.exact(steps, locale)} steps so far, " +
+                    "${progress.percentOfGoal}% of your goal"
+            }
+        },
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = "Today",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                // Compact past 10,000 so five digits fit the smaller ring.
+                text = steps?.let { StepsWidgetFormat.compact(it, locale) } ?: "—",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                text = if (steps == null) "nothing yet" else "${progress.percentOfGoal}%",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+private val RING_GAP = 12.dp
+private val MAIN_MAX = 196.dp
+private val TODAY_MAX = 116.dp
+private val TODAY_STROKE = 10.dp
+
+/** The average's ring takes most of the row; it is the headline. */
+private const val MAIN_SHARE = 0.62f
 
 /** The gap in steps, tinted by whether the goal is met. */
 @Composable

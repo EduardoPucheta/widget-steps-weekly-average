@@ -65,7 +65,7 @@ jobs:
           src=$(find app/build/outputs/apk/release -name "*.apk" | head -1)
           if [ -z "$src" ]; then echo "::error::no APK produced"; exit 1; fi
           version="${GITHUB_REF_NAME#v}"
-          out="weekly-steps-${version}.apk"
+          out="stride-${version}.apk"
           mv "$src" "$out"
           echo "path=$out" >> "$GITHUB_OUTPUT"
 

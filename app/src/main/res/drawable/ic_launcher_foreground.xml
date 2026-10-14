@@ -1,17 +1,46 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- A simple upward step chart: three rising bars on the adaptive-icon safe zone. -->
+<!--
+  Stride's mark: two footprints inside the widget's goal ring, most of the way round.
+
+  Drawn on the adaptive-icon grid: everything stays inside the 66dp safe circle
+  (radius 33 around 54,54) so no launcher mask clips it. Also used as the themed
+  (monochrome) icon, where only alpha counts: the faint track stays faint.
+-->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+
+    <!-- Track: the full lap. -->
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M34,64h10v18h-10z" />
+        android:pathData="M54,29 a25,25 0 1,1 0,50 a25,25 0 1,1 0,-50"
+        android:strokeWidth="5.5"
+        android:strokeColor="#FFFFFF"
+        android:strokeAlpha="0.16" />
+
+    <!-- Progress: from 12 o'clock, clockwise, like the widget's ring. -->
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M49,52h10v30h-10z" />
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M64,40h10v42h-10z" />
+        android:pathData="M54,29 A25,25 0 1,1 32.35,41.5"
+        android:strokeWidth="5.5"
+        android:strokeColor="#4FD8DE"
+        android:strokeLineCap="round" />
+
+    <!-- Each print is a sole and a heel, toes turned slightly out. -->
+    <group
+        android:pivotX="46.5"
+        android:pivotY="59"
+        android:rotation="-10">
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M42.1,54.6 a4.4,6.4 0 1,0 8.8,0 a4.4,6.4 0 1,0 -8.8,0 z M43.2,65.4 a3.3,3.5 0 1,0 6.6,0 a3.3,3.5 0 1,0 -6.6,0 z" />
+    </group>
+    <group
+        android:pivotX="61.5"
+        android:pivotY="49"
+        android:rotation="10">
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M57.1,44.6 a4.4,6.4 0 1,0 8.8,0 a4.4,6.4 0 1,0 -8.8,0 z M58.2,55.4 a3.3,3.5 0 1,0 6.6,0 a3.3,3.5 0 1,0 -6.6,0 z" />
+    </group>
 </vector>

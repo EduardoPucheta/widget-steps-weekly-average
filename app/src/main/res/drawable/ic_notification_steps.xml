@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   Status-bar icons are drawn as a mask: only the alpha channel survives, so this is
-  a solid white silhouette rather than a coloured icon.
+  a solid white silhouette rather than a coloured icon. The launcher icon's two
+  footprints without the ring, which turns to mush at status-bar size.
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
@@ -9,13 +10,27 @@
     android:viewportWidth="24"
     android:viewportHeight="24"
     android:tint="#FFFFFFFF">
-    <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M5,14h3v6h-3z" />
-    <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M10.5,10h3v10h-3z" />
-    <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M16,5h3v15h-3z" />
+    <!-- Scales the launcher icon's prints (centred on 54,54) into this 24-unit box. -->
+    <group
+        android:scaleX="0.62"
+        android:scaleY="0.62"
+        android:translateX="-21.48"
+        android:translateY="-21.48">
+        <group
+            android:pivotX="46.5"
+            android:pivotY="59"
+            android:rotation="-10">
+            <path
+                android:fillColor="#FFFFFFFF"
+                android:pathData="M42.1,54.6 a4.4,6.4 0 1,0 8.8,0 a4.4,6.4 0 1,0 -8.8,0 z M43.2,65.4 a3.3,3.5 0 1,0 6.6,0 a3.3,3.5 0 1,0 -6.6,0 z" />
+        </group>
+        <group
+            android:pivotX="61.5"
+            android:pivotY="49"
+            android:rotation="10">
+            <path
+                android:fillColor="#FFFFFFFF"
+                android:pathData="M57.1,44.6 a4.4,6.4 0 1,0 8.8,0 a4.4,6.4 0 1,0 -8.8,0 z M58.2,55.4 a3.3,3.5 0 1,0 6.6,0 a3.3,3.5 0 1,0 -6.6,0 z" />
+        </group>
+    </group>
 </vector>

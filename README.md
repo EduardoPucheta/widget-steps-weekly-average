@@ -1,7 +1,8 @@
-# widget-steps-weekly-average
+# Stride
 
-An Android home-screen widget showing your **average steps per day over the last 7
-complete days**, measured against a daily goal. Data comes from Health Connect.
+Stride is an Android home-screen widget showing your **average steps per day over
+the last 7 complete days**, measured against a daily goal. Data comes from Health
+Connect.
 
 ```
         ╭───────────╮

@@ -6,6 +6,14 @@
       through Health Connect's own UI, not the runtime permission dialog.
     -->
     <uses-permission android:name="android.permission.health.READ_STEPS" />
+    <!-- Optional: the weight and body-fat charts. Steps work without them. -->
+    <uses-permission android:name="android.permission.health.READ_WEIGHT" />
+    <uses-permission android:name="android.permission.health.READ_BODY_FAT" />
+    <!--
+      Health Connect shares only the 30 days before access was first granted unless
+      this is held. The body charts show a year at a time, and earlier years.
+    -->
+    <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_HISTORY" />
     <!--
       Health Connect answers reads only while the app is on screen unless this is
       granted. The widget and the morning reminder both read from the background.

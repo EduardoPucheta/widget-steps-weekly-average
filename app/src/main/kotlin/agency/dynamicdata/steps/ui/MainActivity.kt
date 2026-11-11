@@ -2,6 +2,9 @@ package agency.dynamicdata.steps.ui
 
 import agency.dynamicdata.steps.core.StepGoal
 import agency.dynamicdata.steps.reminder.ReminderSchedule
+import agency.dynamicdata.steps.ui.body.BodyLoader
+import agency.dynamicdata.steps.ui.body.BodySection
+import agency.dynamicdata.steps.ui.body.BodyState
 import agency.dynamicdata.steps.ui.dashboard.DashboardLoader
 import agency.dynamicdata.steps.ui.dashboard.DashboardSection
 import agency.dynamicdata.steps.ui.dashboard.DashboardState
@@ -44,6 +47,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -83,6 +87,8 @@ class MainActivity : ComponentActivity() {
     private var notificationsBlocked by mutableStateOf(false)
     private var backgroundMissing by mutableStateOf(false)
     private var dashboard by mutableStateOf<DashboardState>(DashboardState.Loading)
+    private var body by mutableStateOf<BodyState>(BodyState.Loading)
+    private var bodyYearsBack by mutableIntStateOf(0)
     private var goalInput by mutableStateOf("")
     private var savedGoal by mutableStateOf(StepGoal.DEFAULT)
 
@@ -111,9 +117,16 @@ class MainActivity : ComponentActivity() {
             // "tap to allow" state rather than leave a stale number on screen.
             refreshWidget()
             reloadDashboard()
+            reloadBody()
             permissionDenied =
                 !granted.containsAll(HealthConnectStepsRepository.REQUIRED_PERMISSIONS)
         }
+
+        // Weight and body fat have their own request: its result says nothing about
+        // steps, so it must not go through the handler above and flag steps denied.
+        val requestBodyPermissions = registerForActivityResult(
+            PermissionController.createRequestPermissionResultContract(),
+        ) { reloadBody() }
 
         // Android 15 draws every app edge to edge regardless; opting in on older
         // versions keeps the look the same everywhere, and the Scaffold below pads
@@ -157,6 +170,18 @@ class MainActivity : ComponentActivity() {
                             requestPermissions.launch(repository.permissionsToRequest())
                         },
                         onInstallHealthConnect = ::openHealthConnectListing,
+                        body = body,
+                        onPreviousYear = {
+                            bodyYearsBack += 1
+                            reloadBody()
+                        },
+                        onNextYear = {
+                            bodyYearsBack = (bodyYearsBack - 1).coerceAtLeast(0)
+                            reloadBody()
+                        },
+                        onRequestBodyAccess = {
+                            requestBodyPermissions.launch(repository.bodyPermissionsToRequest())
+                        },
                     )
                 }
             }
@@ -170,6 +195,13 @@ class MainActivity : ComponentActivity() {
         // every return rather than only on first launch.
         refreshWidget()
         reloadDashboard()
+        reloadBody()
+    }
+
+    private fun reloadBody() {
+        lifecycleScope.launch {
+            body = BodyLoader(repository).load(today = repository.today(), yearsBack = bodyYearsBack)
+        }
     }
 
     private fun reloadDashboard() {
@@ -271,7 +303,12 @@ private fun SetupScreen(
     onSaveGoal: () -> Unit,
     onRequestPermissions: () -> Unit,
     onInstallHealthConnect: () -> Unit,
+    body: BodyState,
+    onPreviousYear: () -> Unit,
+    onNextYear: () -> Unit,
+    onRequestBodyAccess: () -> Unit,
 ) {
+    val locale = LocalConfiguration.current.locales[0] ?: Locale.getDefault()
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -300,9 +337,14 @@ private fun SetupScreen(
             onInstallHealthConnect = onInstallHealthConnect,
         )
 
-        DashboardSection(
-            state = dashboard,
-            locale = LocalConfiguration.current.locales[0] ?: Locale.getDefault(),
+        DashboardSection(state = dashboard, locale = locale)
+
+        BodySection(
+            state = body,
+            locale = locale,
+            onPreviousYear = onPreviousYear,
+            onNextYear = onNextYear,
+            onRequestAccess = onRequestBodyAccess,
         )
 
         SectionCard(title = "Settings") {
@@ -313,8 +355,9 @@ private fun SetupScreen(
 
         Text(
             "The window is the last seven complete days, ending yesterday — today is " +
-                "left out so the number doesn't sag every morning. Steps are read " +
-                "from Health Connect and nothing else, and never leave your phone.",
+                "left out so the number doesn't sag every morning. Steps, weight and " +
+                "body fat are read from Health Connect and nothing else, and never " +
+                "leave your phone.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp),

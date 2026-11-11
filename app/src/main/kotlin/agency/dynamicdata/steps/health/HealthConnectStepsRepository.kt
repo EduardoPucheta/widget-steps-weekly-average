@@ -1,6 +1,7 @@
 package agency.dynamicdata.steps.health
 
 import agency.dynamicdata.steps.core.DailySteps
+import agency.dynamicdata.steps.core.Measurement
 import agency.dynamicdata.steps.core.StepsWindow
 import android.content.Context
 import android.util.Log
@@ -8,14 +9,24 @@ import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.HealthConnectFeatures
 import androidx.health.connect.client.aggregate.AggregationResultGroupedByPeriod
 import androidx.health.connect.client.permission.HealthPermission
+import androidx.health.connect.client.records.BodyFatRecord
+import androidx.health.connect.client.records.Record
 import androidx.health.connect.client.records.StepsRecord
+import androidx.health.connect.client.records.WeightRecord
 import androidx.health.connect.client.request.AggregateGroupByPeriodRequest
+import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.time.Clock
+import java.time.Instant
+import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.Period
+import java.time.ZoneId
+import java.time.ZoneOffset
+import kotlin.reflect.KClass
 
 /**
  * Reads step totals out of Health Connect.
@@ -28,7 +39,7 @@ class HealthConnectStepsRepository(
     private val context: Context,
     private val clock: Clock = Clock.systemDefaultZone(),
     private val io: CoroutineDispatcher = Dispatchers.IO,
-) : StepsRepository {
+) : StepsRepository, BodyRepository {
 
     private val client: HealthConnectClient? by lazy {
         if (availability() == HealthConnectAvailability.AVAILABLE) {
@@ -84,7 +95,78 @@ class HealthConnectStepsRepository(
      * declining access.
      */
     fun permissionsToRequest(): Set<String> =
-        if (backgroundReadSupported()) REQUIRED_PERMISSIONS + READ_IN_BACKGROUND else REQUIRED_PERMISSIONS
+        (if (backgroundReadSupported()) REQUIRED_PERMISSIONS + READ_IN_BACKGROUND else REQUIRED_PERMISSIONS) +
+            bodyPermissionsToRequest()
+
+    /** The body charts' access, asked for on its own from the body section. */
+    fun bodyPermissionsToRequest(): Set<String> =
+        if (historyReadSupported()) BODY_PERMISSIONS + READ_HISTORY else BODY_PERMISSIONS
+
+    private fun historyReadSupported(): Boolean {
+        val client = client ?: return false
+        return runCatching {
+            client.features.getFeatureStatus(HealthConnectFeatures.FEATURE_READ_HEALTH_DATA_HISTORY) ==
+                HealthConnectFeatures.FEATURE_STATUS_AVAILABLE
+        }.getOrDefault(false)
+    }
+
+    private suspend fun granted(): Set<String> = withContext(io) {
+        val client = client ?: return@withContext emptySet()
+        runCatching { client.permissionController.getGrantedPermissions() }
+            .onFailure { Log.w(TAG, "could not read granted permissions", it) }
+            .getOrDefault(emptySet())
+    }
+
+    override suspend fun canRead(metric: BodyMetric): Boolean = permissionFor(metric) in granted()
+
+    override suspend fun historyBlocked(): Boolean = historyReadSupported() && READ_HISTORY !in granted()
+
+    override suspend fun measurements(metric: BodyMetric, from: LocalDate, to: LocalDate): List<Measurement> =
+        withContext(io) {
+            when (metric) {
+                BodyMetric.WEIGHT -> readAll(WeightRecord::class, from, to) {
+                    measurement(it.time, it.zoneOffset, it.weight.inKilograms)
+                }
+                BodyMetric.BODY_FAT -> readAll(BodyFatRecord::class, from, to) {
+                    measurement(it.time, it.zoneOffset, it.percentage.value)
+                }
+            }
+        }
+
+    /**
+     * Every record of [type] in the range, following Health Connect's pages: one
+     * request returns at most [PAGE_SIZE], and a year of daily weigh-ins from a
+     * scale that also logs body fat can run past that.
+     */
+    private suspend fun <T : Record> readAll(
+        type: KClass<T>,
+        from: LocalDate,
+        to: LocalDate,
+        convert: (T) -> Measurement?,
+    ): List<Measurement> {
+        val client = client ?: return emptyList()
+        val filter = TimeRangeFilter.between(from.atStartOfDay(), to.plusDays(1).atStartOfDay())
+        val readings = mutableListOf<Measurement>()
+        var page: String? = null
+        do {
+            val response = client.readRecords(
+                ReadRecordsRequest(type, filter, pageSize = PAGE_SIZE, pageToken = page),
+            )
+            response.records.mapNotNullTo(readings, convert)
+            page = response.pageToken
+        } while (page != null)
+        return readings
+    }
+
+    /**
+     * At the local time it was recorded in, so a weigh-in taken at 8am while
+     * travelling stays an 8am weigh-in. A zero or negative value is a bad record, not
+     * a reading, and is skipped rather than allowed to wreck the axis.
+     */
+    private fun measurement(time: Instant, offset: ZoneOffset?, value: Double): Measurement? {
+        if (value <= 0.0) return null
+        return Measurement(LocalDateTime.ofInstant(time, offset ?: ZoneId.systemDefault()), value)
+    }
 
     override suspend fun dailySteps(window: StepsWindow): List<DailySteps> = withContext(io) {
         val client = client ?: return@withContext emptyList()
@@ -133,5 +215,21 @@ class HealthConnectStepsRepository(
 
         /** The full permission set the app asks for. */
         val REQUIRED_PERMISSIONS: Set<String> = setOf(READ_STEPS)
+
+        val READ_WEIGHT: String = HealthPermission.getReadPermission(WeightRecord::class)
+        val READ_BODY_FAT: String = HealthPermission.getReadPermission(BodyFatRecord::class)
+
+        /** Optional, and separate from [REQUIRED_PERMISSIONS]: steps work without them. */
+        val BODY_PERMISSIONS: Set<String> = setOf(READ_WEIGHT, READ_BODY_FAT)
+
+        /** Lets the body charts reach further back than 30 days before access was granted. */
+        const val READ_HISTORY: String = HealthPermission.PERMISSION_READ_HEALTH_DATA_HISTORY
+
+        private const val PAGE_SIZE = 1000
+
+        fun permissionFor(metric: BodyMetric): String = when (metric) {
+            BodyMetric.WEIGHT -> READ_WEIGHT
+            BodyMetric.BODY_FAT -> READ_BODY_FAT
+        }
     }
 }

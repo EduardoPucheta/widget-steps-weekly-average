@@ -32,16 +32,22 @@ class PermissionsRationaleActivity : ComponentActivity() {
                             .padding(24.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        Text("How your step data is used", style = MaterialTheme.typography.headlineSmall)
+                        Text("How your health data is used", style = MaterialTheme.typography.headlineSmall)
                         Text(
                             "This app reads your daily step counts so the home-screen " +
                                 "widget can show an average for the current week.",
                             style = MaterialTheme.typography.bodyMedium,
                         )
                         Text(
-                            "It reads step counts only, for the last two weeks. Nothing " +
-                                "is written back to Health Connect, nothing is sent off " +
-                                "the device, and there are no accounts or analytics.",
+                            "If you allow it, it also reads your weight and body-fat " +
+                                "readings to chart them a year at a time, and past data " +
+                                "so earlier years can be shown too. Both are optional.",
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        Text(
+                            "It only reads. Nothing is written back to Health Connect, " +
+                                "nothing is sent off the device, and there are no " +
+                                "accounts or analytics.",
                             style = MaterialTheme.typography.bodyMedium,
                         )
                         Text(
